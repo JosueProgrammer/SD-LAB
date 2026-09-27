@@ -20,14 +20,14 @@ export function AboutCard({
 }: AboutCardProps) {
   const hostAsViewer = `host-${hostIdentity}`;
   const isHost = viewerIdentity === hostAsViewer;
-  const followedByLabel = followedByCount === 1 ? "follower" : "followers";
+  const followedByLabel = followedByCount === 1 ? "seguidor" : "seguidores";
 
   return (
     <div className="px-4">
       <div className="group rounded-xl bg-background p-6 lg:p-10 flex flex-col gap-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-x-2 font-semibold text-lg lg:text-2xl">
-            About {hostName}
+            Acerca de {hostName}
             <VerifiedMark />
           </div>
           {isHost && (<BioModal initialValue={bio} />)}
@@ -37,7 +37,7 @@ export function AboutCard({
           {followedByLabel}
         </div>
         <p>
-            {bio || "This user prefers to keep an air of mystery about them"}
+            {bio || "Este usuario prefiere mantener un aire de misterio"}
         </p>
       </div>
     </div>

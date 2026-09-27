@@ -3,14 +3,14 @@ import { Results, ResultsSkeleton } from "./_components/results"
 import { Suspense } from "react"
 
 interface SearchPageProps {
-    searchParams: {
+    searchParams: Promise<{
         term?: string
-    }
+    }>
 }
 
-export default function SearchPage ({searchParams}: SearchPageProps) {
-    
-    if (!searchParams.term) {
+export default async function SearchPage ({searchParams}: SearchPageProps) {
+    const resolvedSearchParams = await searchParams;
+    if (!resolvedSearchParams.term) {
         redirect("/")
     }
 
@@ -18,7 +18,7 @@ export default function SearchPage ({searchParams}: SearchPageProps) {
     return (
         <div className="h-full p-8 max-w-screen-2xl mx-auto">
             <Suspense fallback={<ResultsSkeleton />}>
-            <Results term={searchParams.term} />
+            <Results term={resolvedSearchParams.term} />
             </Suspense>
         </div>
     )

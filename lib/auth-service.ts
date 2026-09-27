@@ -1,15 +1,19 @@
-import { currentUser } from "@clerk/nextjs";
+import { cookies } from "next/headers";
 import { db } from "./db";
+import { firebaseAdminAuth } from "./firebase-admin";
+
+async function getFirebaseUser() {
+    const session = (await cookies()).get("firebase-session")?.value;
+    if (!session) throw new Error("Unauthorized");
+    return firebaseAdminAuth().verifySessionCookie(session, true);
+}
 
 export const getSelf = async () => {
-    const self = await currentUser()
-    if (!self || !self.username) {
-        throw new Error("Unauthorized")
-    }
+    const self = await getFirebaseUser()
 
     const user = await db.user.findUnique({
         where: {
-            externalUserId: self.id
+            externalUserId: self.uid
         }
     })
 
@@ -21,21 +25,21 @@ export const getSelf = async () => {
 }
 
 export  async function getSelfByUsername(username: string) {
-    const self = await currentUser()
-
-    if (!self || !self.username) {
-        throw new Error("Unauthorized")
-    }
+    const self = await getFirebaseUser()
     
     const user = await db.user.findUnique({
-        where: {username}
+        where: {username},
+        include: {
+            stream: true,
+            _count: { select: { followedBy: true } }
+        }
     })
 
     if (!user) {
         throw new Error("User not found")
     }
 
-    if(self.username !== user.username) {
+    if(self.uid !== user.externalUserId) {
         throw new Error("Unauthorized")
     }
 

@@ -31,27 +31,27 @@ export function BioModal({ initialValue }: BioModalProps) {
     startTransition(() => {
         updateUser({bio: value})
         .then(() => {
-            toast.success("User bio updated")
+            toast.success("Biografía actualizada")
             closeRef?.current?.click()
         })
-        .catch(() => toast.error("somthing went wrong"))
+        .catch(() => toast.error("Algo salió mal"))
     })
   }
 
   return (
     <Dialog>
-      <DialogTrigger>
+      <DialogTrigger asChild>
         <Button className="ml-auto" variant="link" size="sm">
-          Edit
+          Editar
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit user bio</DialogTitle>
+          <DialogTitle>Editar biografía</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <Textarea
-            placeholder="User bio"
+            placeholder="Biografía del usuario"
             disabled={false}
             className="resize-none"
             onChange={(e) => setValue(e.target.value)}
@@ -60,11 +60,11 @@ export function BioModal({ initialValue }: BioModalProps) {
           <div className="flex justify-between">
             <DialogClose asChild ref={closeRef}>
               <Button type="button" variant="ghost">
-                Cancel
+                Cancelar
               </Button>
             </DialogClose>
             <Button disabled={isPending} type="submit" variant="primary">
-              Save
+              Guardar
             </Button>
           </div>
         </form>

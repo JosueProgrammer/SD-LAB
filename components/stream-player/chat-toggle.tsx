@@ -20,7 +20,7 @@ export function ChatToggle () {
         }
     }
 
-    const label = collapsed ? "Expand" : "Collapse"
+    const label = collapsed ? "Expandir" : "Contraer"
 
     return (
         <Hint asChild label={label} side="left">

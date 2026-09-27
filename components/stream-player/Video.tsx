@@ -15,7 +15,9 @@ interface VideoProps {
 export function Video ({hostName, hostIdentity}: VideoProps) {
     
     const connectionState = useConnectionState()
+    // The RTMP ingress from OBS creates a remote participant with identity = hostIdentity
     const participant = useRemoteParticipant(hostIdentity)
+
     const tracks = useTracks([
         Track.Source.Camera, Track.Source.Microphone
     ]).filter((track) => track.participant.identity === hostIdentity)
@@ -37,10 +39,11 @@ export function Video ({hostName, hostIdentity}: VideoProps) {
     )
 }
 
+
 export function VideoSkeleton ()  {
     return (
         <div className="aspect-video border-x border-background">
             <Skeleton className="h-full w-full rounded-none" />
         </div>
     )
-}
+}

@@ -10,12 +10,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  ADMIN
+  DOCENTE
+  JEFE_DEPARTAMENTO
+  INVITADO
+}
+
+enum EventType {
+  CONFERENCIA
+  TALLER
+  SIMPOSIO
+  CONGRESO
+  CAPACITACION
+  EXPOSICION
+  RETROALIMENTACION
+}
+
+enum EventStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 model User {
   id             String  @id @default(uuid())
   username       String  @unique
   imageUrl       String  @db.Text
   externalUserId String  @unique
   bio            String? @db.Text
+  role           Role    @default(INVITADO)
 
   following  Follow[] @relation("Following")
   followedBy Follow[] @relation("FollowedBy")
@@ -23,10 +53,16 @@ model User {
   blocking  Block[] @relation("Blocking")
   blockedBy Block[] @relation("BlockedBy")
 
+  createdEvents  Event[] @relation("CreatedEvents")
+  approvedEvents Event[] @relation("ApprovedEvents")
+  participations EventParticipant[]
+  notifications  Notification[]
+
   stream Stream?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  lastLoginAt DateTime?
 }
 
 model Follow {
@@ -82,3 +118,62 @@ model Stream {
   @@index([ingressId])
 
 }
+
+model Event {
+  id          String      @id @default(uuid())
+  title       String
+  type        EventType
+  description String      @db.Text
+  date        DateTime
+  startTime   DateTime
+  endTime     DateTime
+  location    String      @db.Text
+  thumbnailUrl String?    @db.Text
+  status      EventStatus @default(PENDING)
+
+  creatorId   String
+  creator     User   @relation("CreatedEvents", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  approverId  String?
+  approver    User?  @relation("ApprovedEvents", fields: [approverId], references: [id], onDelete: SetNull)
+
+  participants EventParticipant[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([creatorId])
+  @@index([approverId])
+}
+
+model EventParticipant {
+  id        String           @id @default(uuid())
+  eventId   String
+  userId    String
+  status    InvitationStatus @default(PENDING)
+  attended  Boolean          @default(false)
+
+  event     Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  message   String   @db.Text
+  type      String   // e.g. "EVENT_CREATED", "EVENT_REMINDER", "REQUEST_STATUS", "PARTICIPANT_RESPONSE"
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

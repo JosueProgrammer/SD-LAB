@@ -1,12 +1,5 @@
 import Image from "next/image";
-import { Poppins } from "next/font/google";
-import { cn } from "@/lib/utils";
 import Link from "next/link";
-
-const font = Poppins({
-    subsets: ["latin"],
-    weight: ["200", "300", "400", "500", "600", "700", "800"]
-})
 
 export  function Logo () {
     return (
@@ -14,12 +7,13 @@ export  function Logo () {
             <div className="hidden lg:flex items-end gap-x-4 hover:opacity-75 transition">
                 <div className="bg-white rounded-full p-1">
                     <Image
-                     src='/logo.svg'
+                     src='/SD-LAB.png'
                      width='32'
                      height='32'
-                     alt='Ghost'
+                     alt='SD LAB'
                     />
                 </div>
+                <p className="font-semibold text-lg">SD LAB</p>
             </div>
         </Link>
     )

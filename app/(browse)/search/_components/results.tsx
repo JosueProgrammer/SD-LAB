@@ -13,10 +13,10 @@ export async function Results({ term }: ResultsProps) {
   return (
     <div>
       <h2 className="text-lg font-semibold mb-4">
-        Results for term &quot;{term}&quot;
+        Resultados para &quot;{term}&quot;
       </h2>
       {data.length === 0 && (
-        <p className="text-muted-foreground text-sm">No results found</p>
+        <p className="text-muted-foreground text-sm">No se encontraron resultados</p>
       )}
       <div className="flex flex-col gap-y-4">
         {data.map((result) => (

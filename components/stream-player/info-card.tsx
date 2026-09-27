@@ -32,10 +32,10 @@ export function InfoCard({
           </div>
           <div>
             <h2 className="text-sm lg:text-lg font-semibold capitalize">
-              Edit your stream info
+              Editar información del stream
             </h2>
             <p className="text-muted-foreground text-xs lg:text-sm">
-              MAximice you r visisi
+              Maximiza tu visibilidad
             </p>
           </div>
           <InfoModal
@@ -46,18 +46,18 @@ export function InfoCard({
         <Separator />
         <div className="p-4 lg:p-6 space-y-4">
           <div>
-            <h3 className="text-sm text-muted-foreground mb-2">Name</h3>
+            <h3 className="text-sm text-muted-foreground mb-2">Nombre</h3>
             <p className="text-sm font-semibold">{name}</p>
           </div>
           <div>
-            <h3 className="text-sm text-muted-foreground mb-2">Thumbnail</h3>
-            <p className="text-sm font-semibold">
+            <h3 className="text-sm text-muted-foreground mb-2">Miniatura</h3>
+            <div className="text-sm font-semibold">
               {thumbnaiUrl && (
                 <div className="relative aspect-video rounded-md overflow-hidden w-[200px] border border-white/10">
                     <Image src={thumbnaiUrl} fill alt={name} className="object-cover" />
                 </div>
               )}
-            </p>
+            </div>
           </div>
         </div>
       </div>

@@ -10,7 +10,7 @@ export function OffLineVideo ({username}: OffLineVideoProps) {
             <WifiOff className="h-10 w-10 text-muted-foreground" />
             <p className="text-muted-foreground">
                 <span className="text-muted-foreground">
-                    {username} is offline
+                    {username} está desconectado
                 </span>
             </p>
         </div>

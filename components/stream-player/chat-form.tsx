@@ -64,7 +64,7 @@ export function ChatForm({
           onChange={(e) => onChange(e.target.value)}
           value={value}
           disabled={isDisabled}
-          placeholder="send a message"
+          placeholder="Enviar un mensaje"
           className={cn(
             "border-white/10",
             (isFollowersOnly || isDelayed ) && "rounded-t-none border-t-0"
@@ -73,7 +73,7 @@ export function ChatForm({
       </div>
       <div className="ml-auto">
         <Button type="submit" variant="primary" size="sm" disabled={false}>
-          Chat
+          Enviar
         </Button>
       </div>
     </form>

@@ -35,7 +35,7 @@ export default function Search () {
             <Input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder='Search'
+            placeholder='Buscar'
             className='rounded-r-none focus-visible:right-0
             focus-visible:ring-transparent focus-visible:ring-offset-0'
             />

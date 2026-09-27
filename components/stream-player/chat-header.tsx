@@ -9,7 +9,7 @@ export function ChatHeader () {
         <div className="relative p-3 border-b">
             <ChatToggle />
             <p className="font-semibold text-primary text-center">
-                Stream Chat
+                Chat del stream
             </p>
             <div className="absolute right-2 top-2">
                 <VariantToggle />

@@ -17,7 +17,7 @@ export function ChatList ({ isHidden, messages}: ChatListProps) {
             <div className="flex flex-1 items-center justify-center">
                 <p className="text-sm text-muted-foreground">
                     {
-                        isHidden ? "Chat is disabled": "Welcome to chat"
+                        isHidden ? "El chat está deshabilitado": "Bienvenido al chat"
                     }
                 </p>
             </div>

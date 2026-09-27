@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 export  function Toggle () {
 
     const {collapsed, onCollapse, onExpand} = useSidebar((state) => state)
-    const label = collapsed ? 'Expand' : 'Collapse'
+    const label = collapsed ? 'Expandir' : 'Contraer'
     
     return (
         <>

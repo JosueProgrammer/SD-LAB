@@ -43,3 +43,21 @@ export async function getUserById(id:string) {
 
     return user
 }
+
+export const getEligibleGuests = async () => {
+    try {
+        const users = await db.user.findMany({
+            where: {
+                role: "INVITADO"
+            },
+            select: {
+                id: true,
+                username: true,
+                imageUrl: true,
+            }
+        });
+        return users;
+    } catch {
+        return [];
+    }
+};

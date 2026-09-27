@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useCreatorSidebar } from "@/store/use-creator-sidebar";
+import { useSidebar } from "@/store/use-sidebar";
 import { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
@@ -15,7 +15,7 @@ interface NavItemProps {
 }
 
 export function NavItem({ icon: Icon, label, href, isActive }: NavItemProps) {
-  const { collapsed } = useCreatorSidebar((state) => state);
+  const { collapsed } = useSidebar((state) => state);
 
   return (
     <Button

@@ -1,6 +1,3 @@
-import { Button } from '@/components/ui/button'
-import Image from 'next/image'
-import { UserButton } from '@clerk/nextjs'
 import { Results, ResultsSkeleton } from './_components/results'
 import { Suspense } from 'react'
 

@@ -19,7 +19,7 @@ export default function Recommended({ data }: RecommendedProps) {
     <div>
       {showLabel && (
         <div className="pl-6 mb-4">
-          <p className="text-sm text-muted-foreground">Recommended</p>
+          <p className="text-sm text-muted-foreground">Recomendados</p>
         </div>
       )}
       <ul className="space-y-2 px-2">
