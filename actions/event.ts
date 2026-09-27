@@ -15,6 +15,7 @@ export async function createEvent(data: {
   location: string;
   thumbnailUrl?: string | null;
   guestIds: string[];
+  resources: { category: string; name: string; quantity: number; details?: string }[];
 }) {
   const self = await getSelf();
   if (!self) throw new Error("No autenticado");
@@ -40,17 +41,30 @@ export async function createEvent(data: {
           userId: id,
           status: "PENDING"
           }))
+      },
+      resources: {
+          create: data.resources
       }
       }
   });
 
   // Notificar al docente sobre la creación del evento
-  await db.notification.create({
-    data: {
-      userId: self.id,
-      type: "EVENT_CREATED",
-      message: `Tu solicitud para el evento "${event.title}" ha sido registrada y está PENDING.`,
-    }
+  const jefes = await db.user.findMany({ where: { role: "JEFE_DEPARTAMENTO" }});
+  
+  const notifications = jefes.map(jefe => ({
+    userId: jefe.id,
+    type: "EVENT_CREATED",
+    message: `Nueva solicitud de evento "${event.title}" requiere revisión.`
+  }));
+
+  notifications.push({
+    userId: self.id,
+    type: "EVENT_CREATED",
+    message: `Tu solicitud para el evento "${event.title}" ha sido registrada y está PENDING.`,
+  });
+
+  await db.notification.createMany({
+    data: notifications
   });
 
   revalidatePath(`/u/${self.username}/create-event`);

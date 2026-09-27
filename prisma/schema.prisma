@@ -46,6 +46,10 @@ model User {
   externalUserId String  @unique
   bio            String? @db.Text
   role           Role    @default(INVITADO)
+  firstName      String?
+  lastName       String?
+  studentId      String?
+  career         String?
 
   following  Follow[] @relation("Following")
   followedBy Follow[] @relation("FollowedBy")
@@ -138,6 +142,7 @@ model Event {
   approver    User?  @relation("ApprovedEvents", fields: [approverId], references: [id], onDelete: SetNull)
 
   participants EventParticipant[]
+  resources    EventResource[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -176,4 +181,20 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model EventResource {
+  id        String   @id @default(uuid())
+  eventId   String
+  category  String   // e.g., "TECNOLOGICO", "FISICO", "INSTITUCIONAL"
+  name      String
+  quantity  Int      @default(1)
+  details   String?  @db.Text
+  
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId])
 }

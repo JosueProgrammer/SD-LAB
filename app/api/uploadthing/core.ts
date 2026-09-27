@@ -20,8 +20,15 @@ export const ourFileRouter = {
         }
     })
     return {fileUrl: file.url}
+  }),
+  eventImageUploader: f({ image: { maxFileSize: "4MB", maxFileCount: 1 } })
+  .middleware(async () => {
+    const self = await getSelf()
+    return {user: self}
+  })
+  .onUploadComplete(async ({file}) => {
+    return {fileUrl: file.url}
   })
 } satisfies FileRouter;
-
 export type OurFileRouter = typeof ourFileRouter;
 

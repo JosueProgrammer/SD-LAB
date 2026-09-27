@@ -6,6 +6,11 @@ export default defineConfig([
   ...nextCoreWebVitals,
   ...nextTypeScript,
   {
+    settings: {
+      react: {
+        version: "detect",
+      },
+    },
     ignores: [".next/**", "node_modules/**"],
   },
 ]);

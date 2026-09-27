@@ -54,6 +54,10 @@ export const getEligibleGuests = async () => {
                 id: true,
                 username: true,
                 imageUrl: true,
+                firstName: true,
+                lastName: true,
+                studentId: true,
+                career: true,
             }
         });
         return users;
