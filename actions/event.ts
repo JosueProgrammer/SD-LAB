@@ -145,3 +145,73 @@ export async function respondInvitation(eventId: string, status: InvitationStatu
   revalidatePath(`/events/${eventId}`);
   return participant;
 }
+
+export async function startEventLive(eventId: string) {
+  const self = await getSelf();
+  if (!self) throw new Error("No autenticado");
+
+  const event = await db.event.findUnique({ where: { id: eventId } });
+  if (!event) throw new Error("Evento no encontrado");
+
+  if (event.creatorId !== self.id && self.role !== "ADMIN") {
+    throw new Error("No tienes permisos para iniciar este evento");
+  }
+
+  if (event.status !== "APPROVED") {
+    throw new Error("El evento no está aprobado para iniciar transmisión");
+  }
+
+  const updatedEvent = await db.event.update({
+    where: { id: eventId },
+    data: {
+      status: "LIVE",
+      isLive: true,
+      actualStartTime: new Date(),
+    },
+  });
+
+  // Notificar a los participantes
+  const participants = await db.eventParticipant.findMany({
+    where: { eventId },
+    select: { userId: true },
+  });
+
+  if (participants.length > 0) {
+    await db.notification.createMany({
+      data: participants.map((p) => ({
+        userId: p.userId,
+        type: "EVENT_LIVE",
+        message: `El evento "${event.title}" ha comenzado. ¡Conéctate ahora!`,
+      })),
+    });
+  }
+
+  revalidatePath(`/u/${self.username}/live`);
+  revalidatePath(`/u/${self.username}/live/${eventId}`);
+  return updatedEvent;
+}
+
+export async function endEventLive(eventId: string) {
+  const self = await getSelf();
+  if (!self) throw new Error("No autenticado");
+
+  const event = await db.event.findUnique({ where: { id: eventId } });
+  if (!event) throw new Error("Evento no encontrado");
+
+  if (event.creatorId !== self.id && self.role !== "ADMIN") {
+    throw new Error("No tienes permisos para finalizar este evento");
+  }
+
+  const updatedEvent = await db.event.update({
+    where: { id: eventId },
+    data: {
+      status: "FINISHED",
+      isLive: false,
+      actualEndTime: new Date(),
+    },
+  });
+
+  revalidatePath(`/u/${self.username}/live`);
+  revalidatePath(`/u/${self.username}/live/${eventId}`);
+  return updatedEvent;
+}

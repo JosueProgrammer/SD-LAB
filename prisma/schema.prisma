@@ -31,6 +31,8 @@ enum EventStatus {
   PENDING
   APPROVED
   REJECTED
+  LIVE
+  FINISHED
 }
 
 enum InvitationStatus {
@@ -132,8 +134,11 @@ model Event {
   startTime   DateTime
   endTime     DateTime
   location    String      @db.Text
-  thumbnailUrl String?    @db.Text
-  status      EventStatus @default(PENDING)
+  thumbnailUrl    String?     @db.Text
+  status          EventStatus @default(PENDING)
+  isLive          Boolean     @default(false)
+  actualStartTime DateTime?
+  actualEndTime   DateTime?
 
   creatorId   String
   creator     User   @relation("CreatedEvents", fields: [creatorId], references: [id], onDelete: Cascade)
@@ -190,11 +195,11 @@ model EventResource {
   name      String
   quantity  Int      @default(1)
   details   String?  @db.Text
-  
+
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([eventId])
-}
+}
