@@ -1,8 +1,6 @@
-# GHOSTREAM
+# SD LAB
 
 PLataforma de streaming con chat interactivo y control de usuarios
-
-![Ejemplo de Interfaz de Usuario](/public/readme/stream-ghost.png)
 
 ## Descripción
 
@@ -63,11 +61,3 @@ Si deseas contribuir a este proyecto, sigue los siguientes pasos:
 3. Haz tus cambios y commitea: `git commit -am 'Agrega una nueva característica'`.
 4. Sube tus cambios: `git push origin feature/nueva-caracteristica`.
 5. Abre un Pull Request.
-
-## Licencia
-
-Este proyecto está bajo la licencia [MIT](https://opensource.org/licenses/MIT)
-
-## Contacto
-
-Si tienes alguna pregunta o comentario, puedes contactarme a través de [correo electrónico](mailto:daniel21develop@gmail.com) o [Twitter](https://twitter.com/ghostDRM21).
