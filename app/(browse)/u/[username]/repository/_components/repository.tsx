@@ -1,0 +1,14 @@
+"use client";
+import Image from "next/image";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+type Recording = { id: string; title: string; type: string; date: Date; thumbnailUrl: string | null; recordingUrl: string | null };
+const labels: Record<string,string> = { CAPACITACION:"Capacitación", CONFERENCIA:"Conferencia", CONGRESO:"Congreso", EXPOSICION:"Exposición", RETROALIMENTACION:"Retroalimentación", SIMPOSIO:"Simposio", TALLER:"Taller" };
+export function Repository({ recordings, username }: { recordings: Recording[]; username: string }) {
+ const [from,setFrom]=useState(""); const [to,setTo]=useState("");
+ const filtered=useMemo(()=>recordings.filter(r=>{const d=new Date(r.date).toISOString().slice(0,10); return (!from||d>=from)&&(!to||d<=to)}),[recordings,from,to]);
+ const groups=Object.entries(labels).map(([key,label])=>[key,label,filtered.filter(r=>r.type===key)] as const).filter(([, ,items])=>items.length);
+ return <main className="mx-auto max-w-7xl space-y-8 p-6 md:p-8"><header><h1 className="text-3xl font-bold">Repositorio</h1><p className="mt-1 text-muted-foreground">Grabaciones de tus eventos finalizados.</p></header><div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row"><input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm" aria-label="Fecha desde"/><input type="date" value={to} onChange={e=>setTo(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm" aria-label="Fecha hasta"/><Button variant="outline" onClick={()=>{setFrom("");setTo("")}}>Limpiar filtros</Button></div>{groups.length===0?<div className="rounded-lg border p-12 text-center text-muted-foreground">No hay grabaciones disponibles en este período.</div>:groups.map(([key,label,items])=><section key={key} className="space-y-3"><h2 className="text-xl font-semibold">{label}</h2><div className="flex gap-4 overflow-x-auto pb-3">{items.map(item=><article key={item.id} className="w-72 shrink-0 overflow-hidden rounded-xl border bg-card"><div className="relative aspect-video bg-muted">{item.thumbnailUrl?<Image src={item.thumbnailUrl} alt="" fill className="object-cover"/>:<div className="flex h-full items-center justify-center text-muted-foreground">Sin miniatura</div>}</div><div className="space-y-3 p-4"><h3 className="font-semibold line-clamp-1">{item.title}</h3><p className="text-sm text-muted-foreground">{new Intl.DateTimeFormat("es-NI",{dateStyle:"long"}).format(new Date(item.date))}</p><Button size="sm" asChild><Link href={`/u/${username}/repository/${item.id}`}><Play className="mr-1 h-4 w-4"/>Ver</Link></Button></div></article>)}</div></section>)}</main>;
+}

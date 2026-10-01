@@ -32,11 +32,12 @@ export async function POST(request: Request) {
 
   await db.user.upsert({
     where: { externalUserId: decoded.uid },
-    update: { imageUrl: firebaseUser.photoURL || existing?.imageUrl || "" },
+    update: { imageUrl: firebaseUser.photoURL || existing?.imageUrl || "", email: firebaseUser.email || existing?.email || null },
     create: {
       externalUserId: decoded.uid,
       username: resolvedUsername,
       imageUrl: firebaseUser.photoURL || "",
+      email: firebaseUser.email || null,
       stream: { create: { name: `Streams de ${resolvedUsername}` } },
     },
   });

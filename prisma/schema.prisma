@@ -52,6 +52,7 @@ model User {
   lastName       String?
   studentId      String?
   career         String?
+  email          String?
 
   following  Follow[] @relation("Following")
   followedBy Follow[] @relation("FollowedBy")
@@ -139,6 +140,8 @@ model Event {
   isLive          Boolean     @default(false)
   actualStartTime DateTime?
   actualEndTime   DateTime?
+  recordingEnabled Boolean @default(false)
+  recordingUrl     String? @db.Text
 
   creatorId   String
   creator     User   @relation("CreatedEvents", fields: [creatorId], references: [id], onDelete: Cascade)
@@ -162,6 +165,7 @@ model EventParticipant {
   userId    String
   status    InvitationStatus @default(PENDING)
   attended  Boolean          @default(false)
+  certificateIssuedAt DateTime?
 
   event     Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
