@@ -1,13 +1,12 @@
 import { getSelf } from "@/lib/auth-service";
 import { getRepositoryRecording } from "@/lib/event-service";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { CalendarDays, Tag } from "lucide-react";
 
 const labels: Record<string,string> = { CAPACITACION:"Capacitación", CONFERENCIA:"Conferencia", CONGRESO:"Congreso", EXPOSICION:"Exposición", RETROALIMENTACION:"Retroalimentación", SIMPOSIO:"Simposio", TALLER:"Taller" };
 
 export default async function RecordingPage({ params }: { params: Promise<{ eventId: string }> }) {
   const self = await getSelf();
-  if (self.role !== "DOCENTE" && self.role !== "ADMIN" && self.role !== "JEFE_DEPARTAMENTO") redirect(`/u/${self.username}/home`);
   const { eventId } = await params;
   const event = await getRepositoryRecording(eventId, self.id);
   if (!event || !event.recordingUrl) notFound();

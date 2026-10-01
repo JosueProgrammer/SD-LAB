@@ -15,7 +15,7 @@ export function Navigation ({ username }: NavigationProps) {
     const routes = [
         {
             label: "Inicio",
-            href: `/u/${username}/home`,
+            href: `/u/${username}`,
             icon: Home
         },
         {
