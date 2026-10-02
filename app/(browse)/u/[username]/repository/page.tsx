@@ -1,8 +1,12 @@
 import { getSelf } from "@/lib/auth-service";
-import { getRepositoryRecordings } from "@/lib/event-service";
+import { getGuestRepositoryRecordings, getRepositoryRecordings } from "@/lib/event-service";
 import { Repository } from "./_components/repository";
 
 export default async function RepositoryPage() {
   const self = await getSelf();
-  return <Repository recordings={await getRepositoryRecordings(self.id)} username={self.username} />;
+  const recordings =
+    self.role === "INVITADO"
+      ? await getGuestRepositoryRecordings(self.id)
+      : await getRepositoryRecordings(self.id);
+  return <Repository recordings={recordings} username={self.username} />;
 }

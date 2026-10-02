@@ -37,9 +37,10 @@ interface LiveRoomProps {
   hostId: string;
   hostUsername: string;
   username: string;
+  canManage?: boolean;
 }
 
-export function LiveRoom({ event, hostId, hostUsername, username }: LiveRoomProps) {
+export function LiveRoom({ event, hostId, hostUsername, username, canManage = true }: LiveRoomProps) {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -93,7 +94,7 @@ export function LiveRoom({ event, hostId, hostUsername, username }: LiveRoomProp
             <Radio className="w-3.5 h-3.5 text-red-500 animate-pulse" />
             <span className="text-xs font-bold text-red-500 tracking-widest">EN VIVO</span>
           </div>
-          <EndLiveButton eventId={event.id} username={username} />
+          {canManage && <EndLiveButton eventId={event.id} username={username} />}
         </div>
       </div>
 
@@ -117,7 +118,7 @@ export function LiveRoom({ event, hostId, hostUsername, username }: LiveRoomProp
         <div className="lg:col-span-1 xl:col-span-1 flex flex-col border-l border-border bg-background overflow-hidden">
           {/* Participants */}
           <div className="h-[45%] border-b border-border overflow-hidden">
-            <ParticipantList hostIdentity={hostId} onBlock={handleBlock} />
+            <ParticipantList hostIdentity={hostId} onBlock={canManage ? handleBlock : undefined} />
           </div>
 
           {/* Chat */}

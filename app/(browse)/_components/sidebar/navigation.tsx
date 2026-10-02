@@ -1,100 +1,111 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { Fullscreen, KeyRound, MessageSquare, Users, Home, PlusCircle, Video, ClipboardCheck, Calendar, Archive } from "lucide-react"
+import {
+  Archive,
+  Award,
+  BarChart3,
+  Calendar,
+  ClipboardCheck,
+  FileText,
+  Home,
+  LayoutDashboard,
+  LayoutList,
+  PlusCircle,
+  Users,
+  UserPlus,
+  Video,
+  Inbox,
+} from "lucide-react"
+import { Role } from "@prisma/client"
 import { NavItem, NavItemSkeleton } from "./nav-item"
 
 interface NavigationProps {
-    username: string;
+  username: string
+  role: Role
 }
 
-export function Navigation ({ username }: NavigationProps) {
+type RouteItem = {
+  label: string
+  href: string
+  icon: typeof Home
+}
 
-    const pathname = usePathname()
+function routesForRole(username: string, role: Role): RouteItem[] {
+  const base = `/u/${username}`
 
-    const routes = [
-        {
-            label: "Inicio",
-            href: `/u/${username}`,
-            icon: Home
-        },
-        {
-            label: "Crear evento",
-            href: `/u/${username}/create-event`,
-            icon: PlusCircle
-        },
-        {
-            label: "En vivo",
-            href: `/u/${username}/live`,
-            icon: Video
-        },
-        {
-            label: "Participantes",
-            href: `/u/${username}/participants`,
-            icon: Users
-        },
-        {
-            label: "Asistencia",
-            href: `/u/${username}/attendance`,
-            icon: ClipboardCheck
-        },
-        {
-            label: "Próximos eventos",
-            href: `/u/${username}/upcoming`,
-            icon: Calendar
-        },
-        {
-            label: "Repositorio",
-            href: `/u/${username}/repository`,
-            icon: Archive
-        },
-        {
-            label: "Transmisión",
-            href: `/u/${username}`,
-            icon: Fullscreen
-        },
-        {
-            label: "Claves",
-            href: `/u/${username}/keys`,
-            icon: KeyRound
-        },
-        {
-            label: "Chat",
-            href: `/u/${username}/chat`,
-            icon: MessageSquare
-        },
-        {
-            label: "Comunidad",
-            href: `/u/${username}/community`,
-            icon: Users
-        }
+  if (role === "INVITADO") {
+    return [
+      { label: "Inicio", href: base, icon: Home },
+      { label: "En vivo", href: `${base}/live`, icon: Video },
+      { label: "Mis asistencias", href: `${base}/asistencias`, icon: ClipboardCheck },
+      { label: "Próximos eventos", href: `${base}/upcoming`, icon: Calendar },
+      { label: "Repositorio", href: `${base}/repository`, icon: Archive },
+      { label: "Mis certificados", href: `${base}/certificados`, icon: Award },
     ]
+  }
 
-    if(!username) {
-        return (
-            <ul className="space-y-2">
-                {
-                    [...Array(4)].map((_, i) => (
-                        <NavItemSkeleton key={i} />
-                    ))
-                }
-            </ul>
-        )
-    }
+  if (role === "JEFE_DEPARTAMENTO") {
+    return [
+      { label: "Inicio", href: base, icon: Home },
+      { label: "Solicitudes", href: `${base}/solicitudes`, icon: Inbox },
+      { label: "Eventos", href: `${base}/eventos`, icon: LayoutList },
+      { label: "Crear evento", href: `${base}/create-event`, icon: PlusCircle },
+      { label: "En vivo", href: `${base}/live`, icon: Video },
+      { label: "Calendario", href: `${base}/calendario`, icon: Calendar },
+      { label: "Docentes", href: `${base}/docentes`, icon: Users },
+      { label: "Invitados", href: `${base}/invitados`, icon: UserPlus },
+      { label: "Asistencia", href: `${base}/attendance`, icon: ClipboardCheck },
+    ]
+  }
 
+  if (role === "ADMIN") {
+    return [
+      { label: "Dashboard", href: `${base}/dashboard`, icon: LayoutDashboard },
+      { label: "Usuarios", href: `${base}/usuarios`, icon: Users },
+      { label: "Estadísticas", href: `${base}/estadisticas`, icon: BarChart3 },
+      { label: "Reportes", href: `${base}/reportes`, icon: FileText },
+      { label: "Calendario", href: `${base}/calendario`, icon: Calendar },
+      { label: "Solicitudes", href: `${base}/solicitudes`, icon: Inbox },
+    ]
+  }
+
+  return [
+    { label: "Inicio", href: base, icon: Home },
+    { label: "Crear evento", href: `${base}/create-event`, icon: PlusCircle },
+    { label: "En vivo", href: `${base}/live`, icon: Video },
+    { label: "Participantes", href: `${base}/participants`, icon: Users },
+    { label: "Asistencia", href: `${base}/attendance`, icon: ClipboardCheck },
+    { label: "Próximos eventos", href: `${base}/upcoming`, icon: Calendar },
+    { label: "Repositorio", href: `${base}/repository`, icon: Archive },
+  ]
+}
+
+export function Navigation({ username, role }: NavigationProps) {
+  const pathname = usePathname()
+  const routes = routesForRole(username, role)
+
+  if (!username) {
     return (
-        <ul className="space-y-2 px-2 pt-4 lg:pt-0">
-            {
-                routes.map((route) => (
-                    <NavItem
-                     key={route.href}
-                     label={route.label}
-                     icon={route.icon}
-                     href={route.href}
-                     isActive={pathname === route.href}
-                    />
-                ))
-            }
-        </ul>
+      <ul className="space-y-2">
+        {[...Array(4)].map((_, i) => (
+          <NavItemSkeleton key={i} />
+        ))}
+      </ul>
     )
+  }
+
+  return (
+    <ul className="space-y-2 px-2 pt-4 lg:pt-0">
+      {routes.map((route) => (
+        <NavItem
+          key={route.href + route.label}
+          label={route.label}
+          icon={route.icon}
+          href={route.href}
+          isActive={pathname === route.href}
+        />
+      ))}
+    </ul>
+  )
 }

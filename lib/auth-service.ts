@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { Role } from "@prisma/client";
 import { db } from "./db";
 import { firebaseAdminAuth } from "./firebase-admin";
 
@@ -21,7 +22,19 @@ export const getSelf = async () => {
         throw new Error("Not found")
     }
 
+    if (!user.isActive) {
+        throw new Error("Account disabled")
+    }
+
     return user
+}
+
+export async function requireRole(...roles: Role[]) {
+    const self = await getSelf();
+    if (!roles.includes(self.role)) {
+        throw new Error("Unauthorized");
+    }
+    return self;
 }
 
 export  async function getSelfByUsername(username: string) {
@@ -41,6 +54,10 @@ export  async function getSelfByUsername(username: string) {
 
     if(self.uid !== user.externalUserId) {
         throw new Error("Unauthorized")
+    }
+
+    if (!user.isActive) {
+        throw new Error("Account disabled")
     }
 
     return user

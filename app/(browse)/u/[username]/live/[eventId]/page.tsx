@@ -4,37 +4,48 @@ import { notFound, redirect } from "next/navigation";
 import { LiveRoom } from "./_components/live-room";
 
 interface LiveEventPageProps {
-  params: {
+  params: Promise<{
     username: string;
     eventId: string;
-  };
+  }>;
 }
 
 export default async function LiveEventPage({ params }: LiveEventPageProps) {
+  const { username, eventId } = await params;
   const self = await getSelf();
 
   if (!self) {
     redirect("/sign-in");
   }
 
-  const event = await getEventById(params.eventId);
+  const event = await getEventById(eventId);
 
   if (!event) {
     notFound();
   }
 
-  // Solo el creador o admin puede gestionar la transmisión
-  if (event.creatorId !== self.id && self.role !== "ADMIN") {
-    redirect(`/u/${params.username}/live`);
+  const isHost = event.creatorId === self.id || self.role === "ADMIN";
+  const isGuestInvitee = event.participants.some(
+    (participant) =>
+      participant.userId === self.id &&
+      (participant.status === "ACCEPTED" || participant.status === "PENDING")
+  );
+  const isSupervisor = self.role === "JEFE_DEPARTAMENTO" || self.role === "ADMIN";
+
+  if (!isHost && !isGuestInvitee && !isSupervisor) {
+    redirect(`/u/${username}/live`);
   }
 
-  // El evento debe estar aprobado o en vivo para poder entrar
   if (event.status !== "APPROVED" && event.status !== "LIVE") {
-    redirect(`/u/${params.username}/live`);
+    redirect(`/u/${username}/live`);
+  }
+
+  if (!isHost && event.status !== "LIVE") {
+    redirect(`/u/${username}/live`);
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       <LiveRoom
         event={{
           id: event.id,
@@ -48,7 +59,8 @@ export default async function LiveEventPage({ params }: LiveEventPageProps) {
         }}
         hostId={event.creator.id}
         hostUsername={event.creator.username}
-        username={params.username}
+        username={username}
+        canManage={isHost}
       />
     </div>
   );

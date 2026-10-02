@@ -4,16 +4,83 @@ import { db } from "@/lib/db";
 import { getSelf } from "@/lib/auth-service";
 import { revalidatePath } from "next/cache";
 
+async function ensureEventRemindersForUser(userId: string) {
+  const now = new Date();
+  const in11 = new Date(now.getTime() + 11 * 60 * 1000);
+  const in9 = new Date(now.getTime() + 9 * 60 * 1000);
+  const in6 = new Date(now.getTime() + 6 * 60 * 1000);
+  const in4 = new Date(now.getTime() + 4 * 60 * 1000);
+  const in1 = new Date(now.getTime() + 1 * 60 * 1000);
+  const past1 = new Date(now.getTime() - 1 * 60 * 1000);
+
+  const windows = [
+    {
+      from: in9,
+      to: in11,
+      type: "EVENT_REMINDER_10",
+      message: (title: string) => `El evento "${title}" comienza en 10 minutos.`,
+    },
+    {
+      from: in4,
+      to: in6,
+      type: "EVENT_REMINDER_5",
+      message: (title: string) => `El evento "${title}" comienza en 5 minutos.`,
+    },
+    {
+      from: past1,
+      to: in1,
+      type: "EVENT_STARTING",
+      message: (title: string) => `El evento "${title}" está por comenzar.`,
+    },
+  ] as const;
+
+  for (const window of windows) {
+    const events = await db.event.findMany({
+      where: {
+        status: { in: ["APPROVED", "LIVE"] },
+        startTime: { gte: window.from, lte: window.to },
+        participants: {
+          some: {
+            userId,
+            status: { in: ["ACCEPTED", "PENDING"] },
+          },
+        },
+      },
+      select: { id: true, title: true },
+    });
+
+    for (const event of events) {
+      const exists = await db.notification.findFirst({
+        where: {
+          userId,
+          type: window.type,
+          message: { contains: event.title },
+          createdAt: { gte: new Date(now.getTime() - 30 * 60 * 1000) },
+        },
+      });
+      if (exists) continue;
+
+      await db.notification.create({
+        data: {
+          userId,
+          type: window.type,
+          message: window.message(event.title),
+        },
+      });
+    }
+  }
+}
+
 export async function getNotifications() {
   const self = await getSelf();
   if (!self) throw new Error("No autenticado");
 
-  const notifications = await db.notification.findMany({
+  await ensureEventRemindersForUser(self.id);
+
+  return db.notification.findMany({
     where: { userId: self.id },
     orderBy: { createdAt: "desc" },
   });
-
-  return notifications;
 }
 
 export async function markNotificationAsRead(notificationId: string) {
@@ -21,7 +88,7 @@ export async function markNotificationAsRead(notificationId: string) {
   if (!self) throw new Error("No autenticado");
 
   const notification = await db.notification.findUnique({
-    where: { id: notificationId }
+    where: { id: notificationId },
   });
 
   if (!notification || notification.userId !== self.id) {
@@ -30,19 +97,18 @@ export async function markNotificationAsRead(notificationId: string) {
 
   await db.notification.update({
     where: { id: notificationId },
-    data: { read: true }
+    data: { read: true },
   });
 
   revalidatePath("/");
 }
 
-// Función auxiliar para ser usada internamente por otras acciones (no exportada para uso del cliente si no es necesario)
 export async function createNotification(userId: string, message: string, type: string) {
-  return await db.notification.create({
+  return db.notification.create({
     data: {
       userId,
       message,
-      type
-    }
+      type,
+    },
   });
 }

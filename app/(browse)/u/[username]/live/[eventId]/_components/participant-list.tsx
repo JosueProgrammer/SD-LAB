@@ -7,7 +7,7 @@ import { useTransition } from "react";
 
 interface ParticipantListProps {
   hostIdentity: string;
-  onBlock: (participantIdentity: string) => Promise<void>;
+  onBlock?: (participantIdentity: string) => Promise<void>;
 }
 
 export function ParticipantList({ hostIdentity, onBlock }: ParticipantListProps) {
@@ -52,23 +52,25 @@ export function ParticipantList({ hostIdentity, onBlock }: ParticipantListProps)
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             </div>
 
-            <button
-              title="Bloquear espectador"
-              disabled={isPending}
-              onClick={() => {
-                startTransition(async () => {
-                  try {
-                    await onBlock(viewer.identity);
-                    toast.success(`${viewer.name ?? viewer.identity} ha sido bloqueado`);
-                  } catch {
-                    toast.error("No se pudo bloquear al usuario");
-                  }
-                });
-              }}
-              className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-red-600/20 text-red-400 hover:text-red-500 transition-all"
-            >
-              <ShieldBan className="w-4 h-4" />
-            </button>
+            {onBlock && (
+              <button
+                title="Bloquear espectador"
+                disabled={isPending}
+                onClick={() => {
+                  startTransition(async () => {
+                    try {
+                      await onBlock(viewer.identity);
+                      toast.success(`${viewer.name ?? viewer.identity} ha sido bloqueado`);
+                    } catch {
+                      toast.error("No se pudo bloquear al usuario");
+                    }
+                  });
+                }}
+                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-red-600/20 text-red-400 hover:text-red-500 transition-all"
+              >
+                <ShieldBan className="w-4 h-4" />
+              </button>
+            )}
           </div>
         ))}
       </div>

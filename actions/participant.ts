@@ -11,7 +11,7 @@ async function managedParticipant(participantId: string) {
     include: { event: true },
   });
   if (!participant) throw new Error("Participante no encontrado");
-  if (self.role !== "ADMIN" && participant.event.creatorId !== self.id) {
+  if (self.role !== "ADMIN" && self.role !== "JEFE_DEPARTAMENTO" && participant.event.creatorId !== self.id) {
     throw new Error("No tienes permisos para gestionar este participante");
   }
   return { self, participant };
@@ -21,7 +21,7 @@ async function managedEvent(eventId: string) {
   const self = await getSelf();
   const event = await db.event.findUnique({ where: { id: eventId } });
   if (!event) throw new Error("Evento no encontrado");
-  if (self.role !== "ADMIN" && event.creatorId !== self.id) throw new Error("No tienes permisos para gestionar este evento");
+  if (self.role !== "ADMIN" && self.role !== "JEFE_DEPARTAMENTO" && event.creatorId !== self.id) throw new Error("No tienes permisos para gestionar este evento");
   return { self, event };
 }
 
@@ -66,6 +66,14 @@ export async function addEventParticipant(eventId: string, userId: string) {
     where: { eventId_userId: { eventId, userId } },
     create: { eventId, userId, status: "PENDING" },
     update: { status: "PENDING", attended: false, certificateIssuedAt: null },
+  });
+  const event = await db.event.findUnique({ where: { id: eventId }, select: { title: true } });
+  await db.notification.create({
+    data: {
+      userId,
+      type: "INVITATION",
+      message: `Has sido invitado al evento "${event?.title ?? "actividad"}".`,
+    },
   });
   revalidateParticipantViews(self.username);
 }

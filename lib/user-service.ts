@@ -48,7 +48,8 @@ export const getEligibleGuests = async () => {
     try {
         const users = await db.user.findMany({
             where: {
-                role: "INVITADO"
+                role: "INVITADO",
+                isActive: true,
             },
             select: {
                 id: true,

@@ -18,9 +18,13 @@ export default async function Sidebar() {
         <Wrapper>
             <Toggle />
             <div className="space-y-4 py-4 lg:pt-0">
-                {user && <Navigation username={user.username} />}
-                <Following data={following} />
-                <Recommended data={recommended} />
+                {user && <Navigation username={user.username} role={user.role} />}
+                {user?.role !== "INVITADO" && user?.role !== "ADMIN" && (
+                  <>
+                    <Following data={following} />
+                    <Recommended data={recommended} />
+                  </>
+                )}
             </div>
         </Wrapper>
     )

@@ -50,6 +50,7 @@ export async function GET(_request: Request, context: RouteContext<"/api/certifi
     "Se certifica que", fullName, "participo en el evento:", participant.event.title,
     `Realizado el ${date}, de ${time} a ${endTime}.`,
     `Docente responsable: ${participant.event.creator.firstName ?? participant.event.creator.username} ${participant.event.creator.lastName ?? ""}`,
+    `Identificacion institucional: ${participant.user.studentId || "N/D"}`,
   ]);
   return new Response(pdf, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="certificado-${participant.event.id}.pdf"` } });
 }
