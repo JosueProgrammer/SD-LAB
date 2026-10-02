@@ -7,7 +7,7 @@ const SESSION_COOKIE = "firebase-session";
 const SESSION_DURATION = 60 * 60 * 24 * 5 * 1000;
 
 function usernameFrom(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20) || "admin";
+  return value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20) || "usuario";
 }
 
 async function uniqueUsername(preferred: string) {
@@ -29,58 +29,45 @@ export async function POST(request: Request) {
   const firebaseUser = await auth.getUser(decoded.uid);
   const existing = await db.user.findUnique({ where: { externalUserId: decoded.uid } });
 
-  if (!existing) {
-    const totalUsers = await db.user.count();
-    // Bootstrap: el primer usuario de la plataforma se crea como ADMIN.
-    if (totalUsers === 0) {
-      const username = await uniqueUsername(
-        firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "admin"
-      );
-      const created = await db.user.create({
-        data: {
-          externalUserId: decoded.uid,
-          username,
-          email: firebaseUser.email || null,
-          imageUrl: firebaseUser.photoURL || "",
-          role: "ADMIN",
-          isActive: true,
-          lastLoginAt: new Date(),
-          stream: { create: { name: `Streams de ${username}` } },
-        },
-      });
-      const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn: SESSION_DURATION });
-      const response = NextResponse.json({ username: created.username });
-      response.cookies.set(SESSION_COOKIE, sessionCookie, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: SESSION_DURATION / 1000,
-        path: "/",
-      });
-      return response;
-    }
-
-    return NextResponse.json(
-      { error: "Tu cuenta no está registrada. Solicita acceso al administrador o jefe de departamento." },
-      { status: 403 }
-    );
-  }
-
-  if (!existing.isActive) {
+  if (existing && !existing.isActive) {
     return NextResponse.json({ error: "Tu cuenta está desactivada." }, { status: 403 });
   }
 
-  await db.user.update({
-    where: { id: existing.id },
-    data: {
-      imageUrl: firebaseUser.photoURL || existing.imageUrl || "",
-      email: firebaseUser.email || existing.email || null,
-      lastLoginAt: new Date(),
-    },
-  });
+  let username = existing?.username;
+
+  if (!existing) {
+    const isFirstUser = (await db.user.count()) === 0;
+    username = await uniqueUsername(
+      firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "usuario"
+    );
+
+    await db.user.create({
+      data: {
+        externalUserId: decoded.uid,
+        username,
+        email: firebaseUser.email || null,
+        imageUrl: firebaseUser.photoURL || "",
+        role: isFirstUser ? "ADMIN" : "INVITADO",
+        firstName: firebaseUser.displayName?.split(" ")[0] || null,
+        lastName: firebaseUser.displayName?.split(" ").slice(1).join(" ") || null,
+        isActive: true,
+        lastLoginAt: new Date(),
+        stream: { create: { name: `Streams de ${username}` } },
+      },
+    });
+  } else {
+    await db.user.update({
+      where: { id: existing.id },
+      data: {
+        imageUrl: firebaseUser.photoURL || existing.imageUrl || "",
+        email: firebaseUser.email || existing.email || null,
+        lastLoginAt: new Date(),
+      },
+    });
+  }
 
   const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn: SESSION_DURATION });
-  const response = NextResponse.json({ username: existing.username });
+  const response = NextResponse.json({ username });
   response.cookies.set(SESSION_COOKIE, sessionCookie, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
