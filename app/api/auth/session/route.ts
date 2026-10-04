@@ -34,9 +34,11 @@ export async function POST(request: Request) {
   }
 
   let username = existing?.username;
+  let role = existing?.role ?? ("INVITADO" as const);
 
   if (!existing) {
     const isFirstUser = (await db.user.count()) === 0;
+    role = isFirstUser ? "ADMIN" : "INVITADO";
     username = await uniqueUsername(
       firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "usuario"
     );
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
         username,
         email: firebaseUser.email || null,
         imageUrl: firebaseUser.photoURL || "",
-        role: isFirstUser ? "ADMIN" : "INVITADO",
+        role,
         firstName: firebaseUser.displayName?.split(" ")[0] || null,
         lastName: firebaseUser.displayName?.split(" ").slice(1).join(" ") || null,
         isActive: true,
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
   }
 
   const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn: SESSION_DURATION });
-  const response = NextResponse.json({ username });
+  const response = NextResponse.json({ username, role });
   response.cookies.set(SESSION_COOKIE, sessionCookie, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

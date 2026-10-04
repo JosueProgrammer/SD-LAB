@@ -11,15 +11,16 @@ export const ourFileRouter = {
     return {user: self}
   })
   .onUploadComplete(async ({metadata, file}) => {
+    const fileUrl = file.ufsUrl || file.url;
     await db.stream.update({
         where: {
             userId: metadata.user.id
         },
         data: {
-            thumbnaiUrl: file.url
+            thumbnaiUrl: fileUrl
         }
     })
-    return {fileUrl: file.url}
+    return {fileUrl}
   }),
   eventImageUploader: f({ image: { maxFileSize: "4MB", maxFileCount: 1 } })
   .middleware(async () => {
@@ -27,7 +28,8 @@ export const ourFileRouter = {
     return {user: self}
   })
   .onUploadComplete(async ({file}) => {
-    return {fileUrl: file.url}
+    const fileUrl = file.ufsUrl || file.url;
+    return {fileUrl}
   })
 } satisfies FileRouter;
 export type OurFileRouter = typeof ourFileRouter;

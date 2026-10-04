@@ -103,6 +103,18 @@ export async function markNotificationAsRead(notificationId: string) {
   revalidatePath("/");
 }
 
+export async function deleteAllNotifications() {
+  const self = await getSelf();
+  if (!self) throw new Error("No autenticado");
+
+  await db.notification.deleteMany({
+    where: { userId: self.id },
+  });
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
 export async function createNotification(userId: string, message: string, type: string) {
   return db.notification.create({
     data: {

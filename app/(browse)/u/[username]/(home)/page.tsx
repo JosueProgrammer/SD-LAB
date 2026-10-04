@@ -3,6 +3,7 @@ import { getUserByUsername } from "@/lib/user-service"
 import { getSelf } from "@/lib/auth-service"
 import { getGuestHomeData, getPendingEventRequests, getUpcomingEvents } from "@/lib/event-service"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CalendarDays, Video, Archive, ClipboardCheck, Inbox } from "lucide-react"
@@ -114,13 +115,7 @@ export default async function CreatorPage ({params}: CreatorPageProps) {
     }
 
     if (self.role === "ADMIN") {
-        return (
-            <div className="mx-auto max-w-4xl space-y-4 p-6">
-                <h1 className="text-3xl font-bold">Administración SD Lab</h1>
-                <p className="text-muted-foreground">Usa el menú para acceder al dashboard, usuarios, estadísticas y reportes.</p>
-                <Button asChild variant="primary"><Link href={`/u/${username}/dashboard`}>Ir al dashboard</Link></Button>
-            </div>
-        )
+        redirect(`/u/${username}/dashboard`)
     }
 
     if (!user.stream) {

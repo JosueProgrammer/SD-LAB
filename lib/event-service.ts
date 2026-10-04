@@ -243,6 +243,16 @@ export async function getGuestHomeData(userId: string) {
 }
 
 export async function getGuestInvitations(userId: string, status?: InvitationStatus) {
+  const deadline = new Date(Date.now() + 10 * 60 * 1000);
+  await db.eventParticipant.updateMany({
+    where: {
+      userId,
+      status: "PENDING",
+      event: { startTime: { lte: deadline } },
+    },
+    data: { status: "REJECTED" },
+  });
+
   return db.eventParticipant.findMany({
     where: {
       userId,

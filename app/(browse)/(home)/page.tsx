@@ -1,13 +1,13 @@
-import { Results, ResultsSkeleton } from './_components/results'
-import { Suspense } from 'react'
+import { redirect } from "next/navigation";
+import { getSelf } from "@/lib/auth-service";
 
-export default function Home() {
-  return (
-    <div className='h-full p-8 max-w-screen-2xl mx-auto'>
-      <Suspense fallback={<ResultsSkeleton />}>
-      <Results />
-      </Suspense>
-    </div>
-  )
+export default async function Home() {
+  const user = await getSelf().catch(() => null);
+  if (!user) {
+    redirect("/sign-in");
+  }
+  if (user.role === "ADMIN") {
+    redirect(`/u/${user.username}/dashboard`);
+  }
+  redirect(`/u/${user.username}`);
 }
- 

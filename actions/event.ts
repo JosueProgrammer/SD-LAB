@@ -28,6 +28,14 @@ export async function createEvent(data: {
   const isDirectApproval = self.role === "JEFE_DEPARTAMENTO" || self.role === "ADMIN";
   const creatorId = data.creatorId && isDirectApproval ? data.creatorId : self.id;
 
+  const minStart = new Date(Date.now() + 10 * 60 * 1000);
+  if (new Date(data.startTime) < minStart) {
+    throw new Error("La hora de inicio debe tener al menos 10 minutos de anticipación.");
+  }
+  if (new Date(data.endTime) <= new Date(data.startTime)) {
+    throw new Error("La hora de finalización debe ser posterior a la de inicio.");
+  }
+
   const event = await db.event.create({
     data: {
       title: data.title,
@@ -67,7 +75,7 @@ export async function createEvent(data: {
     notifications.push({
       userId: self.id,
       type: "EVENT_CREATED",
-      message: `Tu solicitud para el evento "${event.title}" ha sido registrada y está PENDING.`,
+      message: `Tu solicitud para el evento "${event.title}" ha sido registrada y está pendiente.`,
     });
   }
 
@@ -103,6 +111,8 @@ export async function updateEvent(
     thumbnailUrl: string | null;
     creatorId: string;
     status: EventStatus;
+    guestIds: string[];
+    resources: { category: string; name: string; quantity: number; details?: string }[];
   }>
 ) {
   const self = await requireRole("ADMIN", "JEFE_DEPARTAMENTO", "DOCENTE");
@@ -116,24 +126,85 @@ export async function updateEvent(
 
   if (!canEdit) throw new Error("No tienes permisos para modificar este evento");
 
-  const updated = await db.event.update({
-    where: { id: eventId },
-    data: {
-      ...(data.title !== undefined ? { title: data.title } : {}),
-      ...(data.type !== undefined ? { type: data.type } : {}),
-      ...(data.description !== undefined ? { description: data.description } : {}),
-      ...(data.date !== undefined ? { date: data.date } : {}),
-      ...(data.startTime !== undefined ? { startTime: data.startTime } : {}),
-      ...(data.endTime !== undefined ? { endTime: data.endTime } : {}),
-      ...(data.location !== undefined ? { location: data.location } : {}),
-      ...(data.thumbnailUrl !== undefined ? { thumbnailUrl: data.thumbnailUrl } : {}),
-      ...(data.creatorId !== undefined && (self.role === "ADMIN" || self.role === "JEFE_DEPARTAMENTO")
-        ? { creatorId: data.creatorId }
-        : {}),
-      ...(data.status !== undefined && (self.role === "ADMIN" || self.role === "JEFE_DEPARTAMENTO")
-        ? { status: data.status }
-        : {}),
-    },
+  if (data.startTime) {
+    const minStart = new Date(Date.now() + 10 * 60 * 1000);
+    if (new Date(data.startTime) < minStart) {
+      throw new Error("La hora de inicio debe tener al menos 10 minutos de anticipación.");
+    }
+  }
+
+  const updated = await db.$transaction(async (tx) => {
+    const next = await tx.event.update({
+      where: { id: eventId },
+      data: {
+        ...(data.title !== undefined ? { title: data.title } : {}),
+        ...(data.type !== undefined ? { type: data.type } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.date !== undefined ? { date: data.date } : {}),
+        ...(data.startTime !== undefined ? { startTime: data.startTime } : {}),
+        ...(data.endTime !== undefined ? { endTime: data.endTime } : {}),
+        ...(data.location !== undefined ? { location: data.location } : {}),
+        ...(data.thumbnailUrl !== undefined ? { thumbnailUrl: data.thumbnailUrl } : {}),
+        ...(data.creatorId !== undefined && (self.role === "ADMIN" || self.role === "JEFE_DEPARTAMENTO")
+          ? { creatorId: data.creatorId }
+          : {}),
+        ...(data.status !== undefined && (self.role === "ADMIN" || self.role === "JEFE_DEPARTAMENTO")
+          ? { status: data.status }
+          : {}),
+      },
+    });
+
+    if (data.resources) {
+      await tx.eventResource.deleteMany({ where: { eventId } });
+      if (data.resources.length > 0) {
+        await tx.eventResource.createMany({
+          data: data.resources.map((resource) => ({
+            eventId,
+            category: resource.category,
+            name: resource.name,
+            quantity: resource.quantity,
+            details: resource.details,
+          })),
+        });
+      }
+    }
+
+    if (data.guestIds) {
+      const uniqueGuestIds = Array.from(new Set(data.guestIds));
+      const existing = await tx.eventParticipant.findMany({
+        where: { eventId },
+        select: { userId: true },
+      });
+      const existingIds = new Set(existing.map((item) => item.userId));
+      const toAdd = uniqueGuestIds.filter((id) => !existingIds.has(id));
+      const toRemove = existing
+        .map((item) => item.userId)
+        .filter((id) => !uniqueGuestIds.includes(id));
+
+      if (toRemove.length > 0) {
+        await tx.eventParticipant.deleteMany({
+          where: { eventId, userId: { in: toRemove } },
+        });
+      }
+      if (toAdd.length > 0) {
+        await tx.eventParticipant.createMany({
+          data: toAdd.map((userId) => ({
+            eventId,
+            userId,
+            status: "PENDING",
+          })),
+        });
+        await tx.notification.createMany({
+          data: toAdd.map((userId) => ({
+            userId,
+            type: "INVITATION",
+            message: `Has sido invitado al evento "${next.title}".`,
+          })),
+        });
+      }
+    }
+
+    return next;
   });
 
   await db.notification.create({
@@ -145,8 +216,24 @@ export async function updateEvent(
   });
 
   revalidatePath(`/u/${self.username}/solicitudes`);
+  revalidatePath(`/u/${self.username}/eventos`);
   revalidatePath(`/u/${self.username}/upcoming`);
   return updated;
+}
+
+/** Marca como rechazadas las invitaciones pendientes cuyo plazo (10 min antes) ya venció. */
+export async function expirePendingInvitationsForUser(userId: string) {
+  const deadline = new Date(Date.now() + 10 * 60 * 1000);
+  await db.eventParticipant.updateMany({
+    where: {
+      userId,
+      status: "PENDING",
+      event: {
+        startTime: { lte: deadline },
+      },
+    },
+    data: { status: "REJECTED" },
+  });
 }
 
 export async function approveEvent(eventId: string) {
@@ -229,6 +316,26 @@ export async function respondInvitation(eventId: string, status: InvitationStatu
   if (!self) throw new Error("No autenticado");
   if (status !== "ACCEPTED" && status !== "REJECTED") {
     throw new Error("Estado de invitación inválido");
+  }
+
+  await expirePendingInvitationsForUser(self.id);
+
+  const current = await db.eventParticipant.findUnique({
+    where: { eventId_userId: { eventId, userId: self.id } },
+    include: { event: { select: { startTime: true, title: true } } },
+  });
+  if (!current) throw new Error("Invitación no encontrada");
+  if (current.status !== "PENDING") {
+    throw new Error("Esta invitación ya no está pendiente");
+  }
+
+  const responseDeadline = new Date(current.event.startTime.getTime() - 10 * 60 * 1000);
+  if (new Date() > responseDeadline) {
+    await db.eventParticipant.update({
+      where: { eventId_userId: { eventId, userId: self.id } },
+      data: { status: "REJECTED" },
+    });
+    throw new Error("El tiempo para responder venció. La invitación fue marcada como rechazada.");
   }
 
   const participant = await db.eventParticipant.update({

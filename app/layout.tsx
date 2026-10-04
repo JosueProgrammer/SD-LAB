@@ -17,12 +17,12 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <ThemeProvider
-          attribute='class'
-          forcedTheme='dark'
-          storageKey='sd-lab-theme'
-          >
-          <Toaster position='bottom-center' theme='light'/>
-        {children}
+          attribute="class"
+          forcedTheme="dark"
+          storageKey="sd-lab-theme"
+        >
+          <Toaster position="bottom-center" theme="light" />
+          {children}
         </ThemeProvider>
         </body>
     </html>
