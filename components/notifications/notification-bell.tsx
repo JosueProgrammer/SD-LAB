@@ -100,27 +100,18 @@ export const NotificationBell = ({
     }
   };
 
-  const handleRead = async (id: string) => {
+  const handleOpen = async (item: Notification) => {
     try {
-      if (!notification.read) {
-        await markNotificationAsRead(notification.id);
+      if (!item.read) {
+        await markNotificationAsRead(item.id);
         setNotifications((prev) =>
-          prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
+          prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
         );
       }
     } catch (error) {
       console.error(error);
     }
-    router.push(pathForNotification(notification.type, username, role));
-  };
-
-  const handleClearAll = async () => {
-    try {
-      await deleteAllNotifications();
-      setNotifications([]);
-    } catch (error) {
-      console.error(error);
-    }
+    router.push(pathForNotification(item.type, username, role));
   };
 
   return (

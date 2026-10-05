@@ -41,6 +41,16 @@ const RESOURCE_OPTIONS = {
   ],
 };
 
+const RESOURCE_CATEGORY_LABELS: Record<string, string> = {
+  TECNOLOGICO: "Tecnológico",
+  FISICO: "Físico",
+  INSTITUCIONAL: "Institucional",
+};
+
+function labelResourceCategory(category: string) {
+  return RESOURCE_CATEGORY_LABELS[category] ?? category;
+}
+
 const emptyForm = {
   title: "",
   type: "CONFERENCIA",
@@ -411,47 +421,13 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
           onChange={setThumbnailUrl}
           onUploadingChange={setThumbnailUploading}
         />
-        <h2 className="border-b pb-2 text-xl font-bold">5. Miniatura del evento</h2>
-        {thumbnailUrl ? (
-          <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border bg-muted">
-            <Image src={thumbnailUrl} alt="Miniatura" fill className="object-cover" unoptimized />
-            <Button
-              type="button"
-              variant="destructive"
-              size="icon"
-              className="absolute right-2 top-2 z-10"
-              onClick={() => setThumbnailUrl("")}
-              disabled={isPending}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <div className="rounded-xl border-2 border-dashed bg-muted/10 p-8 transition hover:bg-muted/30">
-            <UploadDropzone
-              endpoint="eventImageUploader"
-              onClientUploadComplete={(res) => {
-                const url = res?.[0]?.ufsUrl || res?.[0]?.url || res?.[0]?.serverData?.fileUrl;
-                if (!url) {
-                  toast.error("No se pudo obtener la URL de la imagen");
-                  return;
-                }
-                setThumbnailUrl(url);
-                toast.success("Imagen subida correctamente");
-              }}
-              onUploadError={(error: Error) => {
-                toast.error(`Error al subir imagen: ${error.message}`);
-              }}
-            />
-          </div>
-        )}
       </div>
 
       <Button
         variant="default"
         size="lg"
         type="submit"
-        disabled={isPending}
+        disabled={isPending || thumbnailUploading}
         className="w-full text-base font-semibold shadow-md"
       >
         {isPending ? "Enviando solicitud..." : "Enviar solicitud de evento"}
