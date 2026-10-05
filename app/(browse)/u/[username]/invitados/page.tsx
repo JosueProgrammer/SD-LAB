@@ -5,5 +5,11 @@ import { UsersManager } from "@/components/users/users-manager";
 export default async function InvitadosPage() {
   await requireRole("JEFE_DEPARTAMENTO", "ADMIN");
   const users = await listUsers({ role: "INVITADO" });
-  return <UsersManager users={users} allowedRoles={["INVITADO"]} title="Gestión de invitados" />;
+  return (
+    <UsersManager
+      users={users}
+      allowedRoles={["INVITADO", "DOCENTE"]}
+      title="Gestión de invitados"
+    />
+  );
 }

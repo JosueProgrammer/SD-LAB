@@ -69,12 +69,13 @@ export function UsersManager({
 
   function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     startTransition(async () => {
       try {
         await createManagedUser({
           email: String(form.get("email")),
-          password: String(form.get("password")),
+          password: String(form.get("password") || "123456"),
           role: createRole,
           username: String(form.get("username") || ""),
           firstName: String(form.get("firstName") || ""),
@@ -82,8 +83,8 @@ export function UsersManager({
           studentId: String(form.get("studentId") || ""),
           career: String(form.get("career") || ""),
         });
-        toast.success("Usuario creado");
-        event.currentTarget.reset();
+        toast.success("Usuario creado y registrado. Podrá ingresar según su rol.");
+        formElement.reset();
         setCreateRole(allowedRoles[0]);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "No se pudo crear");
@@ -108,7 +109,14 @@ export function UsersManager({
             <Input name="lastName" placeholder="Apellido" />
             <Input name="username" placeholder="Usuario (opcional)" />
             <Input name="email" type="email" placeholder="Correo" required />
-            <Input name="password" type="password" placeholder="Contraseña temporal" required minLength={6} />
+            <Input
+              name="password"
+              type="password"
+              placeholder="Contraseña (123456)"
+              defaultValue="123456"
+              required
+              minLength={6}
+            />
             <Select value={createRole} onValueChange={(value) => setCreateRole(value as Role)}>
               <SelectTrigger>
                 <SelectValue placeholder="Rol" />
@@ -134,7 +142,7 @@ export function UsersManager({
 
       <div className="flex flex-col gap-3 md:flex-row">
         <Input
-          placeholder="Buscar por nombre, correo o carné"
+          placeholder="Buscar"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />

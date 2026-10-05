@@ -16,3 +16,4 @@ export default async function EventosPage() {
 
   return <EventsManager events={events} teachers={teachers} username={self.username} />;
 }
+

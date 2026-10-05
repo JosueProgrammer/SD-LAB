@@ -10,7 +10,7 @@ export function AuthUserMenu() {
   async function logout() {
     await signOut(firebaseAuth);
     await fetch("/api/auth/session", { method: "DELETE" });
-    router.push("/");
+    router.push("/sign-in");
     router.refresh();
   }
   return <Button size="sm" variant="ghost" onClick={logout}>Salir</Button>;

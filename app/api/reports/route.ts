@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSelf } from "@/lib/auth-service";
 import { db } from "@/lib/db";
+import { labelEventStatus, labelEventType, roleLabels } from "@/lib/labels";
 
 export const runtime = "nodejs";
 
@@ -53,12 +54,15 @@ export async function GET(request: Request) {
     const users = await db.user.findMany({ orderBy: { createdAt: "desc" }, take: 40 });
     lines = users.map(
       (user) =>
-        `${user.username} | ${user.role} | ${user.email || "-"} | ${user.isActive ? "Activo" : "Inactivo"}`
+        `${user.username} | ${roleLabels[user.role]} | ${user.email || "-"} | ${user.isActive ? "Activo" : "Inactivo"}`
     );
   } else if (type === "events") {
     title = "Reporte de eventos";
     const events = await db.event.findMany({ orderBy: { createdAt: "desc" }, take: 40 });
-    lines = events.map((event) => `${event.title} | ${event.type} | ${event.status}`);
+    lines = events.map(
+      (event) =>
+        `${event.title} | ${labelEventType(event.type)} | ${labelEventStatus(event.status)}`
+    );
   } else if (type === "activity") {
     title = "Reporte de actividad";
     const [users, events, participants] = await Promise.all([
@@ -67,7 +71,7 @@ export async function GET(request: Request) {
       db.eventParticipant.count({ where: { createdAt: { gte: from } } }),
     ]);
     lines = [
-      `Periodo: ${period}`,
+      `Periodo: ${period === "week" ? "Semana" : "Mes"}`,
       `Usuarios nuevos: ${users}`,
       `Eventos creados: ${events}`,
       `Participantes registrados: ${participants}`,

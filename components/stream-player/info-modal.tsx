@@ -119,9 +119,18 @@ export function InfoModal({ initialName, initialThumbnaiUrl }: InfoModalProps) {
                     },
                   }}
                   onClientUploadComplete={(res) => {
-                    setThumbnailUrl(res?.[0]?.url);
+                    const url = res?.[0]?.ufsUrl || res?.[0]?.url;
+                    if (!url) {
+                      toast.error("No se pudo obtener la URL de la imagen");
+                      return;
+                    }
+                    setThumbnailUrl(url);
+                    toast.success("Imagen subida correctamente");
                     router.refresh();
-                    closeRef?.current?.click()
+                    closeRef?.current?.click();
+                  }}
+                  onUploadError={(error: Error) => {
+                    toast.error(`Error al subir imagen: ${error.message}`);
                   }}
                 />
               </div>

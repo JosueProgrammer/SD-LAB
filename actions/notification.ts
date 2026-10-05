@@ -112,6 +112,7 @@ export async function deleteAllNotifications() {
   });
 
   revalidatePath("/");
+  return { ok: true };
 }
 
 export async function createNotification(userId: string, message: string, type: string) {

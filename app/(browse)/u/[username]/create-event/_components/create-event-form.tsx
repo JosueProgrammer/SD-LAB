@@ -33,33 +33,42 @@ const RESOURCE_OPTIONS = {
     "Equipos de audio",
     "Cámaras para la transmisión",
   ],
-  FISICO: [
-    "Mesas",
-    "Sillas",
-    "Manteles",
-    "Agua",
-  ],
+  FISICO: ["Mesas", "Sillas", "Manteles", "Agua"],
   INSTITUCIONAL: [
     "Reserva de auditorios o aulas",
     "Invitación o coordinación con otros departamentos",
     "Participación de centros tecnológicos u otras instituciones",
-  ]
+  ],
 };
+
+const emptyForm = {
+  title: "",
+  type: "CONFERENCIA",
+  description: "",
+  date: "",
+  startTime: "",
+  endTime: "",
+  location: "",
+  extraRequirements: "",
+};
+
+function resetFormState(
+  setFormData: (value: typeof emptyForm) => void,
+  setThumbnailUrl: (value: string) => void,
+  setSelectedGuests: (value: string[]) => void,
+  setGuestSearch: (value: string) => void,
+  setSelectedResources: (value: { category: string; name: string }[]) => void
+) {
+  setFormData({ ...emptyForm });
+  setThumbnailUrl("");
+  setSelectedGuests([]);
+  setGuestSearch("");
+  setSelectedResources([]);
+}
 
 export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
   const [isPending, startTransition] = useTransition();
-
-  const [formData, setFormData] = useState({
-    title: "",
-    type: "CONFERENCIA",
-    description: "",
-    date: "",
-    startTime: "",
-    endTime: "",
-    location: "",
-    extraRequirements: "",
-  });
-
+  const [formData, setFormData] = useState(emptyForm);
   const [thumbnailUrl, setThumbnailUrl] = useState<string>("");
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
   const [thumbnailPickerKey, setThumbnailPickerKey] = useState(0);
@@ -78,7 +87,9 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
     );
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -91,23 +102,19 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
 
   const toggleAllGuests = () => {
     if (selectedGuests.length === filteredGuests.length && filteredGuests.length > 0) {
-      // Unselect all filtered
-      const filteredIds = filteredGuests.map(g => g.id);
-      setSelectedGuests(prev => prev.filter(id => !filteredIds.includes(id)));
+      const filteredIds = filteredGuests.map((g) => g.id);
+      setSelectedGuests((prev) => prev.filter((id) => !filteredIds.includes(id)));
     } else {
-      // Select all filtered
       const newIds = new Set(selectedGuests);
-      filteredGuests.forEach(g => newIds.add(g.id));
+      filteredGuests.forEach((g) => newIds.add(g.id));
       setSelectedGuests(Array.from(newIds));
     }
   };
 
   const handleResourceToggle = (category: string, name: string) => {
     setSelectedResources((prev) => {
-      const exists = prev.find(r => r.category === category && r.name === name);
-      if (exists) {
-        return prev.filter(r => !(r.category === category && r.name === name));
-      }
+      const exists = prev.find((r) => r.category === category && r.name === name);
+      if (exists) return prev.filter((r) => !(r.category === category && r.name === name));
       return [...prev, { category, name }];
     });
   };
@@ -118,34 +125,34 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
       const eventDate = new Date(formData.date);
       const startDateTime = new Date(`${formData.date}T${formData.startTime}`);
       const endDateTime = new Date(`${formData.date}T${formData.endTime}`);
+      const minStart = new Date(Date.now() + 10 * 60 * 1000);
 
-      // Validate date
-      const now = new Date();
-      if (eventDate < new Date(now.toDateString())) {
-        toast.error("La fecha del evento no puede ser en el pasado.");
+      if (Number.isNaN(startDateTime.getTime()) || Number.isNaN(endDateTime.getTime())) {
+        toast.error("Fecha u hora inválida.");
         return;
       }
-      if (startDateTime < now) {
-         toast.error("La hora de inicio no puede ser en el pasado.");
-         return;
+      if (startDateTime < minStart) {
+        toast.error("La fecha/hora debe tener al menos 10 minutos de anticipación.");
+        return;
       }
       if (endDateTime <= startDateTime) {
-         toast.error("La hora de finalización debe ser posterior a la de inicio.");
-         return;
+        toast.error("La hora de finalización debe ser posterior a la de inicio.");
+        return;
       }
 
-      const resources: { category: string; name: string; quantity: number; details?: string }[] = selectedResources.map(r => ({
-        category: r.category,
-        name: r.name,
-        quantity: 1
-      }));
+      const resources: { category: string; name: string; quantity: number; details?: string }[] =
+        selectedResources.map((r) => ({
+          category: r.category,
+          name: r.name,
+          quantity: 1,
+        }));
 
       if (formData.extraRequirements.trim()) {
         resources.push({
           category: "EXTRA",
           name: "Requisitos adicionales",
           quantity: 1,
-          details: formData.extraRequirements
+          details: formData.extraRequirements,
         });
       }
 
@@ -171,24 +178,42 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
           setThumbnailUrl("");
           setThumbnailPickerKey((current) => current + 1);
         })
-        .catch(() => toast.error("Error al crear la solicitud de evento"));
+        .catch((error) =>
+          toast.error(error instanceof Error ? error.message : "Error al crear la solicitud")
+        );
     });
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-8 bg-background border rounded-xl p-8 w-full max-w-4xl mx-auto mt-6 shadow-sm">
-      
+    <form
+      onSubmit={onSubmit}
+      className="mx-auto mt-6 w-full max-w-4xl space-y-8 rounded-xl border bg-background p-8 shadow-sm"
+    >
       <div className="space-y-4">
-        <h2 className="text-xl font-bold border-b pb-2">1. Información General</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <h2 className="border-b pb-2 text-xl font-bold">1. Información general</h2>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-semibold">Título del evento *</label>
-            <Input required name="title" value={formData.title} onChange={handleChange} placeholder="Ej. Conferencia de Inteligencia Artificial" disabled={isPending} className="bg-muted/50" />
+            <Input
+              required
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              placeholder="Ej. Conferencia de Inteligencia Artificial"
+              disabled={isPending}
+              className="bg-muted/50"
+            />
           </div>
-
           <div className="space-y-2">
             <label className="text-sm font-semibold">Tipo de evento *</label>
-            <select required name="type" value={formData.type} onChange={handleChange} disabled={isPending} className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+            <select
+              required
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+              disabled={isPending}
+              className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/50 px-3 py-2 text-sm"
+            >
               <option value="CONFERENCIA">Conferencia</option>
               <option value="TALLER">Taller</option>
               <option value="SIMPOSIO">Simposio</option>
@@ -199,103 +224,181 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
             </select>
           </div>
         </div>
-
         <div className="space-y-2">
           <label className="text-sm font-semibold">Descripción del evento *</label>
-          <Textarea required name="description" value={formData.description} onChange={handleChange} placeholder="Propósito y contenido de la actividad" disabled={isPending} className="bg-muted/50 h-24" />
+          <Textarea
+            required
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            placeholder="Propósito y contenido de la actividad"
+            disabled={isPending}
+            className="h-24 bg-muted/50"
+          />
         </div>
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-bold border-b pb-2">2. Programación y Lugar</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <h2 className="border-b pb-2 text-xl font-bold">2. Programación y lugar</h2>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <div className="space-y-2">
             <label className="text-sm font-semibold">Fecha *</label>
-            <Input required type="date" name="date" value={formData.date} onChange={handleChange} disabled={isPending} className="bg-muted/50" />
+            <Input
+              required
+              type="date"
+              name="date"
+              value={formData.date}
+              onChange={handleChange}
+              disabled={isPending}
+              className="bg-muted/50"
+            />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold">Hora de inicio *</label>
-            <Input required type="time" name="startTime" value={formData.startTime} onChange={handleChange} disabled={isPending} className="bg-muted/50" />
+            <Input
+              required
+              type="time"
+              name="startTime"
+              value={formData.startTime}
+              onChange={handleChange}
+              disabled={isPending}
+              className="bg-muted/50"
+            />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold">Hora de finalización *</label>
-            <Input required type="time" name="endTime" value={formData.endTime} onChange={handleChange} disabled={isPending} className="bg-muted/50" />
+            <Input
+              required
+              type="time"
+              name="endTime"
+              value={formData.endTime}
+              onChange={handleChange}
+              disabled={isPending}
+              className="bg-muted/50"
+            />
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Puedes seleccionar el mismo día, con al menos 10 minutos de anticipación.
+        </p>
         <div className="space-y-2">
           <label className="text-sm font-semibold">Lugar del evento *</label>
-          <Input required name="location" value={formData.location} onChange={handleChange} placeholder="Ej. Auditorio Principal" disabled={isPending} className="bg-muted/50" />
+          <Input
+            required
+            name="location"
+            value={formData.location}
+            onChange={handleChange}
+            placeholder="Ej. Auditorio Principal"
+            disabled={isPending}
+            className="bg-muted/50"
+          />
         </div>
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-bold border-b pb-2">3. Invitación de Participantes</h2>
+        <h2 className="border-b pb-2 text-xl font-bold">3. Invitación de participantes</h2>
         <div className="relative">
-           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-           <Input 
-             placeholder="Buscar por nombre, apellidos, carné o carrera..." 
-             className="pl-9 bg-muted/50" 
-             value={guestSearch}
-             onChange={(e) => setGuestSearch(e.target.value)}
-             disabled={isPending}
-           />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar"
+            className="bg-muted/50 pl-9"
+            value={guestSearch}
+            onChange={(e) => setGuestSearch(e.target.value)}
+            disabled={isPending}
+          />
         </div>
-        <div className="border rounded-md p-4 bg-muted/20">
-          <div className="flex justify-between items-center mb-3">
-             <span className="text-sm font-medium text-muted-foreground">{filteredGuests.length} estudiantes encontrados</span>
-             <Button type="button" variant="outline" size="sm" onClick={toggleAllGuests} disabled={isPending || filteredGuests.length === 0}>
-                {selectedGuests.length === filteredGuests.length && filteredGuests.length > 0 ? "Deseleccionar todos" : "Seleccionar todos"}
-             </Button>
+        <div className="rounded-md border bg-muted/20 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">
+              {filteredGuests.length} estudiantes encontrados
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleAllGuests}
+              disabled={isPending || filteredGuests.length === 0}
+            >
+              {selectedGuests.length === filteredGuests.length && filteredGuests.length > 0
+                ? "Deseleccionar todos"
+                : "Seleccionar todos"}
+            </Button>
           </div>
-          <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-              {filteredGuests.length === 0 && <p className="text-sm text-center py-4 text-muted-foreground">No se encontraron estudiantes.</p>}
-              {filteredGuests.map((guest) => (
-                  <label key={guest.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition">
-                     <div className="flex items-center gap-x-3">
-                        <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                            checked={selectedGuests.includes(guest.id)}
-                            onChange={() => handleGuestToggle(guest.id)}
-                            disabled={isPending}
-                        />
-                        <div>
-                           <p className="font-medium text-sm">{guest.firstName || guest.username} {guest.lastName || ""}</p>
-                           <p className="text-xs text-muted-foreground">{guest.career || "Estudiante"} {guest.studentId ? `• Carné: ${guest.studentId}` : ""}</p>
-                        </div>
-                     </div>
-                  </label>
-              ))}
+          <div className="max-h-60 space-y-2 overflow-y-auto pr-2">
+            {filteredGuests.length === 0 && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No se encontraron estudiantes.
+              </p>
+            )}
+            {filteredGuests.map((guest) => (
+              <label
+                key={guest.id}
+                className="flex cursor-pointer items-center justify-between rounded-lg border p-3 transition hover:bg-muted/50"
+              >
+                <div className="flex items-center gap-x-3">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    checked={selectedGuests.includes(guest.id)}
+                    onChange={() => handleGuestToggle(guest.id)}
+                    disabled={isPending}
+                  />
+                  <div>
+                    <p className="text-sm font-medium">
+                      {guest.firstName || guest.username} {guest.lastName || ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {guest.career || "Estudiante"}
+                      {guest.studentId ? ` • Carné: ${guest.studentId}` : ""}
+                    </p>
+                  </div>
+                </div>
+              </label>
+            ))}
           </div>
         </div>
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-bold border-b pb-2">4. Recursos y Requisitos</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <h2 className="border-b pb-2 text-xl font-bold">4. Recursos y requisitos</h2>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {Object.entries(RESOURCE_OPTIONS).map(([category, items]) => (
             <div key={category} className="space-y-3">
-               <h3 className="font-semibold text-sm text-primary">{category.charAt(0) + category.slice(1).toLowerCase()}</h3>
-               <div className="space-y-2">
-                 {items.map(item => (
-                    <label key={item} className="flex items-start gap-x-2 text-sm cursor-pointer hover:text-primary transition">
-                       <input 
-                         type="checkbox" 
-                         className="mt-1 h-3.5 w-3.5 rounded border-gray-300"
-                         checked={selectedResources.some(r => r.category === category && r.name === item)}
-                         onChange={() => handleResourceToggle(category, item)}
-                         disabled={isPending}
-                       />
-                       <span className="leading-tight">{item}</span>
-                    </label>
-                 ))}
-               </div>
+              <h3 className="text-sm font-semibold text-primary">
+                {labelResourceCategory(category)}
+              </h3>
+              <div className="space-y-2">
+                {items.map((item) => (
+                  <label
+                    key={item}
+                    className="flex cursor-pointer items-start gap-x-2 text-sm transition hover:text-primary"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-3.5 w-3.5 rounded border-gray-300"
+                      checked={selectedResources.some(
+                        (r) => r.category === category && r.name === item
+                      )}
+                      onChange={() => handleResourceToggle(category, item)}
+                      disabled={isPending}
+                    />
+                    <span className="leading-tight">{item}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           ))}
         </div>
         <div className="space-y-2 pt-2">
           <label className="text-sm font-semibold">Requisitos adicionales</label>
-          <Textarea name="extraRequirements" value={formData.extraRequirements} onChange={handleChange} placeholder="Especificar cualquier otro requisito no listado" disabled={isPending} className="bg-muted/50" />
+          <Textarea
+            name="extraRequirements"
+            value={formData.extraRequirements}
+            onChange={handleChange}
+            placeholder="Especificar cualquier otro requisito no listado"
+            disabled={isPending}
+            className="bg-muted/50"
+          />
         </div>
       </div>
 
@@ -308,9 +411,49 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
           onChange={setThumbnailUrl}
           onUploadingChange={setThumbnailUploading}
         />
+        <h2 className="border-b pb-2 text-xl font-bold">5. Miniatura del evento</h2>
+        {thumbnailUrl ? (
+          <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border bg-muted">
+            <Image src={thumbnailUrl} alt="Miniatura" fill className="object-cover" unoptimized />
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon"
+              className="absolute right-2 top-2 z-10"
+              onClick={() => setThumbnailUrl("")}
+              disabled={isPending}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="rounded-xl border-2 border-dashed bg-muted/10 p-8 transition hover:bg-muted/30">
+            <UploadDropzone
+              endpoint="eventImageUploader"
+              onClientUploadComplete={(res) => {
+                const url = res?.[0]?.ufsUrl || res?.[0]?.url || res?.[0]?.serverData?.fileUrl;
+                if (!url) {
+                  toast.error("No se pudo obtener la URL de la imagen");
+                  return;
+                }
+                setThumbnailUrl(url);
+                toast.success("Imagen subida correctamente");
+              }}
+              onUploadError={(error: Error) => {
+                toast.error(`Error al subir imagen: ${error.message}`);
+              }}
+            />
+          </div>
+        )}
       </div>
 
-      <Button variant="default" size="lg" type="submit" disabled={isPending || thumbnailUploading} className="w-full text-base font-semibold shadow-md">
+      <Button
+        variant="default"
+        size="lg"
+        type="submit"
+        disabled={isPending}
+        className="w-full text-base font-semibold shadow-md"
+      >
         {isPending ? "Enviando solicitud..." : "Enviar solicitud de evento"}
       </Button>
     </form>
