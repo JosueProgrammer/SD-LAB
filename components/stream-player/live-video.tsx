@@ -1,7 +1,7 @@
 "use client";
 
 import { Participant, Track } from "livekit-client";
-import { useRef, useState, useEffect } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTracks } from "@livekit/components-react";
 import { FullScreenControl } from "./fullscreen-control";
 import { useEventListener } from "usehooks-ts";
@@ -37,10 +37,6 @@ export function LiveVideo({ participant }: LiveVideoProps) {
     }
   }
 
-  useEffect(() => {
-    onVolumeChange(0)
-  }, [])
-
   const toggleFullscreen = () => {
     if (isFullscreen) {
       document.exitFullscreen();
@@ -54,19 +50,33 @@ export function LiveVideo({ participant }: LiveVideoProps) {
     setIsFullscreen(isCurrentlyFullscreen);
   };
 
-  useEventListener("fullscreenchange", handleFullscreenChange, wrapperRef as any);
+  useEventListener(
+    "fullscreenchange",
+    handleFullscreenChange,
+    wrapperRef as RefObject<HTMLDivElement>
+  );
 
-  useTracks([Track.Source.Camera, Track.Source.Microphone])
-    .filter((track) => track.participant.identity === participant.identity)
-    .forEach((track) => {
-      if (videoRef.current) {
-        track.publication.track?.attach(videoRef.current);
-      }
+  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone])
+    .filter((track) => track.participant.identity === participant.identity);
+
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element) return;
+
+    tracks.forEach((track) => {
+      track.publication.track?.attach(element);
     });
+
+    return () => {
+      tracks.forEach((track) => {
+        track.publication.track?.detach(element);
+      });
+    };
+  }, [tracks]);
 
   return (
     <div ref={wrapperRef} className="relative h-full flex">
-      <video ref={videoRef} width="100%" />
+      <video ref={videoRef} width="100%" muted />
       <div className="absolute top-0 h-full w-full opacity-0 hover:opacity-100 hover:transition-all">
         <div className="absolute bottom-0 flex h-14 w-full items-center justify-between bg-gradient-to-r from-neutral-900 px-4">
           <VolumeControl onChange={onVolumeChange} value={volume} onToggle={toggleMute} />

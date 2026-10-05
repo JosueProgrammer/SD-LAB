@@ -40,6 +40,8 @@ export function DataTable<TData, TValue>({
     []
   );
 
+  // TanStack Table devuelve funciones que el compilador de React no puede memorizar.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

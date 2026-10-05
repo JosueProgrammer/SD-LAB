@@ -2,7 +2,6 @@
 
 import { useSidebar } from "@/store/use-sidebar";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
 import { ToogleSkeleton } from "./toggle";
 import { RecommendedSkeleton } from "./recommended";
 import { useIsClient } from "usehooks-ts";

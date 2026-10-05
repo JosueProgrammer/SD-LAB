@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { EventType } from "@prisma/client";
 import { createEvent } from "@/actions/event";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { UploadDropzone } from "@/lib/uploadthing";
-import { Search, X } from "lucide-react";
-import Image from "next/image";
+import { uploadFiles } from "@/lib/uploadthing";
+import { FileImage, Search, Upload, X } from "lucide-react";
 
 interface Guest {
   id: string;
@@ -61,6 +61,8 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
   });
 
   const [thumbnailUrl, setThumbnailUrl] = useState<string>("");
+  const [thumbnailUploading, setThumbnailUploading] = useState(false);
+  const [thumbnailPickerKey, setThumbnailPickerKey] = useState(0);
   const [selectedGuests, setSelectedGuests] = useState<string[]>([]);
   const [guestSearch, setGuestSearch] = useState("");
   const [selectedResources, setSelectedResources] = useState<{ category: string; name: string }[]>([]);
@@ -149,7 +151,7 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
 
       createEvent({
         title: formData.title,
-        type: formData.type as any,
+        type: formData.type as EventType,
         description: formData.description,
         date: eventDate,
         startTime: startDateTime,
@@ -167,6 +169,7 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
           setSelectedGuests([]);
           setSelectedResources([]);
           setThumbnailUrl("");
+          setThumbnailPickerKey((current) => current + 1);
         })
         .catch(() => toast.error("Error al crear la solicitud de evento"));
     });
@@ -298,32 +301,106 @@ export const CreateEventForm = ({ guests }: CreateEventFormProps) => {
 
       <div className="space-y-4">
         <h2 className="text-xl font-bold border-b pb-2">5. Miniatura del Evento</h2>
-        {thumbnailUrl ? (
-          <div className="relative aspect-video rounded-xl overflow-hidden border bg-muted flex items-center justify-center">
-            <Image src={thumbnailUrl} alt="Miniatura" fill className="object-cover" />
-            <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 z-10" onClick={() => setThumbnailUrl("")} disabled={isPending}>
-               <X className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <div className="border-2 border-dashed rounded-xl p-8 bg-muted/10 hover:bg-muted/30 transition">
-             <UploadDropzone
-                endpoint="eventImageUploader"
-                onClientUploadComplete={(res) => {
-                  setThumbnailUrl(res?.[0]?.url);
-                  toast.success("Imagen subida correctamente");
-                }}
-                onUploadError={(error: Error) => {
-                  toast.error(`Error al subir imagen: ${error.message}`);
-                }}
-             />
-          </div>
-        )}
+        <ThumbnailPicker
+          key={thumbnailPickerKey}
+          value={thumbnailUrl}
+          disabled={isPending}
+          onChange={setThumbnailUrl}
+          onUploadingChange={setThumbnailUploading}
+        />
       </div>
 
-      <Button variant="default" size="lg" type="submit" disabled={isPending} className="w-full text-base font-semibold shadow-md">
+      <Button variant="default" size="lg" type="submit" disabled={isPending || thumbnailUploading} className="w-full text-base font-semibold shadow-md">
         {isPending ? "Enviando solicitud..." : "Enviar solicitud de evento"}
       </Button>
     </form>
   );
 };
+
+function ThumbnailPicker({
+  value,
+  disabled,
+  onChange,
+  onUploadingChange,
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (url: string) => void;
+  onUploadingChange: (uploading: boolean) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState(value);
+  const [fileName, setFileName] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  const clear = () => {
+    if (preview.startsWith("blob:")) URL.revokeObjectURL(preview);
+    setPreview("");
+    setFileName("");
+    onChange("");
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const onFile = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Selecciona una imagen");
+      return;
+    }
+    if (preview.startsWith("blob:")) URL.revokeObjectURL(preview);
+    const localUrl = URL.createObjectURL(file);
+    setPreview(localUrl);
+    setFileName(file.name);
+    setUploading(true);
+    onUploadingChange(true);
+    try {
+      const uploaded = await uploadFiles("eventImageUploader", { files: [file] });
+      const url = uploaded[0]?.url;
+      if (!url) throw new Error("No se recibió la imagen");
+      onChange(url);
+      toast.success("Imagen lista");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo subir la imagen");
+      onChange("");
+    } finally {
+      setUploading(false);
+      onUploadingChange(false);
+    }
+  };
+
+  if (!preview) {
+    return (
+      <label className="flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed bg-muted/10 p-8 text-center transition hover:bg-muted/30">
+        <Upload className="h-8 w-8 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Selecciona una imagen para la miniatura</span>
+        <span className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Subir 1 archivo</span>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          disabled={disabled || uploading}
+          onChange={(event) => onFile(event.target.files?.[0])}
+        />
+      </label>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="relative aspect-video overflow-hidden rounded-xl border bg-muted">
+        {/* blob: no puede pasar por el optimizador de next/image */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={preview} alt="Vista previa de la miniatura" className="h-full w-full object-cover" />
+        <Button type="button" variant="destructive" size="icon" className="absolute right-2 top-2 z-10" onClick={clear} disabled={disabled || uploading} aria-label="Quitar imagen">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <FileImage className="h-4 w-4 shrink-0" />
+        <span className="truncate">{fileName || "Imagen seleccionada"}</span>
+        {uploading && <span className="shrink-0">Subiendo...</span>}
+      </div>
+    </div>
+  );
+}

@@ -141,6 +141,7 @@ export default async function LivePage({ params }: LivePageProps) {
             <EventPreviewCard
               key={event.id}
               username={username}
+              hostId={self.id}
               event={{
                 id: event.id,
                 title: event.title,
@@ -153,6 +154,9 @@ export default async function LivePage({ params }: LivePageProps) {
                 status: event.status,
                 isLive: event.isLive,
                 participants: event._count.participants,
+                serverUrl: event.serverUrl,
+                streamKey: event.streamKey,
+                obsConnected: event.obsConnected,
               }}
             />
           ))}

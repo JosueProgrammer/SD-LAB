@@ -18,26 +18,29 @@ export async function POST(req: Request) {
 
     const event = receiver.receive(body, authorization)
 
-    if(event.event === "ingress_started") {
-        await db.stream.update({
-            where: {
-                ingressId:  event.ingressInfo?.ingressId
-            },
-            data: {
-                isLive: true
-            }
+    const ingressId = event.ingressInfo?.ingressId
+
+    if (ingressId && event.event === "ingress_started") {
+        await db.stream.updateMany({
+            where: { ingressId },
+            data: { isLive: true },
+        })
+        await db.event.updateMany({
+            where: { ingressId },
+            data: { obsConnected: true },
         })
     }
 
-    if(event.event === "ingress_ended") {
-        await db.stream.update({
-            where: {
-                ingressId:  event.ingressInfo?.ingressId
-            },
-            data: {
-                isLive: false
-            }
+    if (ingressId && event.event === "ingress_ended") {
+        await db.stream.updateMany({
+            where: { ingressId },
+            data: { isLive: false },
+        })
+        await db.event.updateMany({
+            where: { ingressId },
+            data: { obsConnected: false },
         })
     }
 
+    return new Response(null, { status: 200 })
 }

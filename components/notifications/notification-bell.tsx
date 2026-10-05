@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell } from "lucide-react";
+import { Bell, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getNotifications, markNotificationAsRead } from "@/actions/notification";
+import { deleteAllNotifications, getNotifications, markNotificationAsRead } from "@/actions/notification";
 
 type Notification = {
   id: string;
@@ -44,6 +44,16 @@ export const NotificationBell = () => {
     };
   }, []);
 
+  const handleDeleteAll = async () => {
+    if (!window.confirm("¿Eliminar todas las notificaciones?")) return;
+    try {
+      await deleteAllNotifications();
+      setNotifications([]);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const handleRead = async (id: string) => {
     try {
       await markNotificationAsRead(id);
@@ -68,7 +78,25 @@ export const NotificationBell = () => {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <div className="border-b px-4 py-2 text-sm font-semibold">Notificaciones</div>
+        <div className="flex items-center justify-between border-b px-4 py-2">
+          <span className="text-sm font-semibold">Notificaciones</span>
+          {notifications.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label="Eliminar todas las notificaciones"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void handleDeleteAll();
+              }}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          )}
+        </div>
         <ScrollArea className="h-[300px]">
           {notifications.length === 0 ? (
             <div className="p-4 text-center text-sm text-muted-foreground">

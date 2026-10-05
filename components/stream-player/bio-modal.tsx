@@ -9,7 +9,6 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
-import Hint from "../hint";
 import { Textarea } from "../ui/textarea";
 import { ElementRef, useRef, useState, useTransition } from "react";
 import { updateUser } from "@/actions/user";

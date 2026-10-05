@@ -22,7 +22,7 @@ export async function onBlock (id: string) {
 
     try {
         await roomService.removeParticipant(self.id, id)
-    } catch (error) {
+    } catch {
         // this means user is not in the room
     }
 

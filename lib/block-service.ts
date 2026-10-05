@@ -27,7 +27,7 @@ export async function isBlockedByUser(id: string) {
 
     return !!existingBlock
 
-  } catch (error) {
+  } catch {
     return false
   }
 }

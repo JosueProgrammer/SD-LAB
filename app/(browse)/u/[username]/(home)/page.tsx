@@ -123,6 +123,57 @@ export default async function CreatorPage ({params}: CreatorPageProps) {
         )
     }
 
+    if (self.role === "DOCENTE") {
+        const upcoming = await getUpcomingEvents(self.id)
+        return (
+            <div className="mx-auto max-w-6xl space-y-8 p-6">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Inicio</h1>
+                    <p className="text-muted-foreground">
+                        Tus actividades y accesos rápidos. La señal de la transmisión se ve en En vivo, cuando el evento está al aire.
+                    </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <Button asChild variant="outline"><Link href={`/u/${username}/create-event`}><Video className="mr-2 h-4 w-4" />Crear evento</Link></Button>
+                    <Button asChild variant="outline"><Link href={`/u/${username}/live`}><Video className="mr-2 h-4 w-4" />En vivo</Link></Button>
+                    <Button asChild variant="outline"><Link href={`/u/${username}/participants`}><ClipboardCheck className="mr-2 h-4 w-4" />Participantes</Link></Button>
+                    <Button asChild variant="outline"><Link href={`/u/${username}/attendance`}><ClipboardCheck className="mr-2 h-4 w-4" />Asistencia</Link></Button>
+                </div>
+                <section className="space-y-3">
+                    <h2 className="text-xl font-semibold">Tus eventos</h2>
+                    {upcoming.length === 0 ? (
+                        <Card><CardContent className="p-6 text-muted-foreground">No tienes eventos pendientes ni en curso.</CardContent></Card>
+                    ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                            {upcoming.slice(0, 6).map((event) => (
+                                <Card key={event.id}>
+                                    <CardHeader>
+                                        <CardTitle className="text-base">{event.title}</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3 text-sm text-muted-foreground">
+                                        <p>
+                                            {new Intl.DateTimeFormat("es-NI", { dateStyle: "medium", timeStyle: "short" }).format(event.startTime)}
+                                            {" · "}{event.location}
+                                        </p>
+                                        {event.status === "LIVE" ? (
+                                            <Button asChild size="sm" variant="primary">
+                                                <Link href={`/u/${username}/live/${event.id}`}>Ver transmisión</Link>
+                                            </Button>
+                                        ) : (
+                                            <Button asChild size="sm" variant="outline">
+                                                <Link href={`/u/${username}/live`}>Ir a En vivo</Link>
+                                            </Button>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            </div>
+        )
+    }
+
     if (!user.stream) {
         throw new Error("Unauthorized")
     }

@@ -2,7 +2,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 type Recording = { id: string; title: string; type: string; date: Date; thumbnailUrl: string | null; recordingUrl: string | null };
 const labels: Record<string,string> = { CAPACITACION:"Capacitación", CONFERENCIA:"Conferencia", CONGRESO:"Congreso", EXPOSICION:"Exposición", RETROALIMENTACION:"Retroalimentación", SIMPOSIO:"Simposio", TALLER:"Taller" };

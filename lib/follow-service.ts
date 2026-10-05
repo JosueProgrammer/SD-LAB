@@ -30,7 +30,7 @@ export async function getFollowedUsers() {
     });
 
     return followedUsers;
-  } catch (error) {
+  } catch {
     return [];
   }
 }
@@ -59,7 +59,7 @@ export async function isFollowingUser(id: string) {
     });
 
     return !!existingFollow;
-  } catch (error) {
+  } catch {
     return false;
   }
 }

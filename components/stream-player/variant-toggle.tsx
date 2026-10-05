@@ -10,7 +10,7 @@ export function VariantToggle () {
     const { variant, onChangeVariant } = useChatSidebar((state) => state)
 
     const isChat = variant === ChatVariant.CHAT
-    let Icon = isChat ? Users : MessageSquare
+    const Icon = isChat ? Users : MessageSquare
 
     const onToggle = () => {
         const newVariant = isChat ? ChatVariant.COMMUNITY : ChatVariant.CHAT

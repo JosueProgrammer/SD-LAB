@@ -143,6 +143,10 @@ model Event {
   actualEndTime   DateTime?
   recordingEnabled Boolean @default(false)
   recordingUrl     String? @db.Text
+  ingressId        String?  @unique
+  serverUrl        String?  @db.Text
+  streamKey        String?  @db.Text
+  obsConnected     Boolean  @default(false)
 
   creatorId   String
   creator     User   @relation("CreatedEvents", fields: [creatorId], references: [id], onDelete: Cascade)

@@ -28,7 +28,7 @@ export function useViewerToken(hostIdentity: string) {
             setName(name)
         }
 
-      } catch (error) {
+      } catch {
         toast.error("Something went wrong");
       }
     };

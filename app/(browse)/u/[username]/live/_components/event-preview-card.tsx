@@ -8,6 +8,7 @@ import { es } from "date-fns/locale";
 import { Calendar, Clock, MapPin, Users, Radio, Play } from "lucide-react";
 import { toast } from "sonner";
 import { startEventLive } from "@/actions/event";
+import { ObsTransmitButton } from "./obs-transmit-button";
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   CONFERENCIA: "Conferencia",
@@ -32,11 +33,15 @@ interface EventPreviewCardProps {
     status: string;
     isLive: boolean;
     participants: number;
+    serverUrl: string | null;
+    streamKey: string | null;
+    obsConnected: boolean;
   };
   username: string;
+  hostId: string;
 }
 
-export function EventPreviewCard({ event, username }: EventPreviewCardProps) {
+export function EventPreviewCard({ event, username, hostId }: EventPreviewCardProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -149,6 +154,13 @@ export function EventPreviewCard({ event, username }: EventPreviewCardProps) {
             </>
           )}
         </button>
+        <ObsTransmitButton
+          eventId={event.id}
+          hostId={hostId}
+          serverUrl={event.serverUrl}
+          streamKey={event.streamKey}
+          obsConnected={event.obsConnected}
+        />
       </div>
     </div>
   );

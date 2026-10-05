@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { firebaseAdminAuth } from "@/lib/firebase-admin";
 import { db } from "@/lib/db";

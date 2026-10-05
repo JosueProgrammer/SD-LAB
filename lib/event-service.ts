@@ -359,10 +359,10 @@ export async function getDepartmentEvents() {
   });
 }
 
-export async function getCalendarEvents(_scope: "department" | "all" = "all") {
+export async function getCalendarEvents(scope: "department" | "all" = "all") {
   return db.event.findMany({
     where: {
-      status: { notIn: ["REJECTED"] },
+      status: { notIn: scope === "department" ? ["REJECTED"] : ["REJECTED"] },
     },
     select: {
       id: true,

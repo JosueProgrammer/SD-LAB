@@ -12,7 +12,7 @@ export async function createViewerToken (hostIdentity: string) {
 
     try {
         self = await getSelf()        
-    } catch (error) {
+    } catch {
         const id = v4()
         const username = `gest#${Math.floor(Math.random() * 1000)}`
         self = {id, username}
