@@ -8,7 +8,7 @@ async function managedParticipant(participantId: string) {
   const self = await getSelf();
   const participant = await db.eventParticipant.findUnique({
     where: { id: participantId },
-    include: { event: true },
+    include: { event: true, user: { select: { username: true } } },
   });
   if (!participant) throw new Error("Participante no encontrado");
   if (self.role !== "ADMIN" && self.role !== "JEFE_DEPARTAMENTO" && participant.event.creatorId !== self.id) {
@@ -47,14 +47,21 @@ export async function removeEventParticipant(participantId: string) {
 export async function issueCertificate(participantId: string) {
   const { self, participant } = await managedParticipant(participantId);
   if (participant.event.status !== "FINISHED") throw new Error("El certificado solo está disponible al finalizar el evento");
-  if (participant.status !== "ACCEPTED" || !participant.attended) {
-    throw new Error("El participante debe haber confirmado y asistido al evento");
-  }
+  if (participant.certificateIssuedAt) return participant;
+
   const updated = await db.eventParticipant.update({
     where: { id: participantId },
-    data: { certificateIssuedAt: new Date() },
+    data: { certificateIssuedAt: new Date(), attended: true },
+  });
+  await db.notification.create({
+    data: {
+      userId: participant.userId,
+      type: "CERTIFICATE",
+      message: `Se emitió tu certificado del evento "${participant.event.title}".`,
+    },
   });
   revalidateParticipantViews(self.username);
+  revalidatePath(`/u/${participant.user.username}/certificados`);
   return updated;
 }
 

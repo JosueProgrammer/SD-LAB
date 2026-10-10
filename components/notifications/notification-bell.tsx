@@ -48,6 +48,8 @@ function pathForNotification(type: string, username: string, role: Role) {
       return `${base}/live`;
     case "PARTICIPANT_RESPONSE":
       return `${base}/participants`;
+    case "CERTIFICATE":
+      return `${base}/certificados`;
     default: {
       const msg = type.toLowerCase();
       if (msg.includes("solicitud") || type.includes("REQUEST")) return `${base}/solicitudes`;
