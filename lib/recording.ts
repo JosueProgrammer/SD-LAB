@@ -1,6 +1,4 @@
-import { randomUUID } from "crypto";
-import { UTApi } from "uploadthing/server";
-import { getStorage } from "firebase-admin/storage";
+import { UTApi, UTFile } from "uploadthing/server";
 import {
   EgressClient,
   EncodedFileType,
@@ -11,10 +9,13 @@ import {
 import { EgressStatus } from "livekit-server-sdk/dist/proto/livekit_egress";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { firebaseAdminApp } from "@/lib/firebase-admin";
+
+const livekitHost = (process.env.LIVEKIT_API_URL || "")
+  .replace(/^wss:/i, "https:")
+  .replace(/^ws:/i, "http:");
 
 const egressClient = new EgressClient(
-  process.env.LIVEKIT_API_URL!,
+  livekitHost,
   process.env.LIVEKIT_API_KEY,
   process.env.LIVEKIT_API_SECRET
 );
@@ -22,39 +23,58 @@ const egressClient = new EgressClient(
 const recordingStartFailed = new Set<string>();
 const recordingStartError = new Map<string, string>();
 
-function firebaseConfig() {
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.replace(/^gs:\/\//, "");
-  if (!projectId || !clientEmail || !privateKey || !bucket) return null;
-  return {
-    bucket,
-    credentials: JSON.stringify({
-      type: "service_account",
-      project_id: projectId,
-      private_key: privateKey,
-      client_email: clientEmail,
-      token_uri: "https://oauth2.googleapis.com/token",
-    }),
-  };
+function supabaseConfig() {
+  const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  const accessKey = process.env.SUPABASE_S3_ACCESS_KEY;
+  const secret = process.env.SUPABASE_S3_SECRET_KEY;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "recordings";
+  const region = process.env.SUPABASE_S3_REGION;
+  if (!projectUrl || !accessKey || !secret || !region) return null;
+
+  const projectRef = projectUrl.match(/^https?:\/\/([^.]+)\.supabase\.co/i)?.[1];
+  const endpoint =
+    process.env.SUPABASE_S3_ENDPOINT ||
+    (projectRef
+      ? `https://${projectRef}.storage.supabase.co/storage/v1/s3`
+      : `${projectUrl}/storage/v1/s3`);
+
+  return { projectUrl, accessKey, secret, bucket, region, endpoint };
 }
 
-function fileOutput(eventId: string): EncodedFileOutput | null {
+function hasUploadThing() {
+  return Boolean(process.env.UPLOADTHING_TOKEN);
+}
+
+function livekitFileOutput(eventId: string): EncodedFileOutput | null {
   const filepath = `recordings/${eventId}-${Date.now()}.mp4`;
   const base = { fileType: EncodedFileType.MP4, filepath, disableManifest: true };
+
+  const supabase = supabaseConfig();
+  if (supabase) {
+    return {
+      ...base,
+      s3: {
+        accessKey: supabase.accessKey,
+        secret: supabase.secret,
+        region: supabase.region,
+        bucket: supabase.bucket,
+        endpoint: supabase.endpoint,
+        forcePathStyle: true,
+      },
+    };
+  }
 
   const account = process.env.AZURE_STORAGE_ACCOUNT;
   const accountKey = process.env.AZURE_STORAGE_KEY;
   const container = process.env.AZURE_STORAGE_CONTAINER;
-  if (account && accountKey && container) {
+  if (account && accountKey && container && hasUploadThing()) {
     return { ...base, azure: { accountName: account, accountKey, containerName: container } };
   }
 
   const accessKey = process.env.S3_ACCESS_KEY;
   const secret = process.env.S3_SECRET_KEY;
   const bucket = process.env.S3_BUCKET;
-  if (accessKey && secret && bucket) {
+  if (accessKey && secret && bucket && hasUploadThing()) {
     return {
       ...base,
       s3: {
@@ -68,75 +88,108 @@ function fileOutput(eventId: string): EncodedFileOutput | null {
     };
   }
 
-  const firebase = firebaseConfig();
-  if (!firebase) return null;
-  return { ...base, gcp: { bucket: firebase.bucket, credentials: firebase.credentials } };
-}
-
-function isPlayableUrl(url: string) {
-  const publicBase = process.env.S3_PUBLIC_URL;
-  const bucket = process.env.S3_BUCKET;
-  if (url.includes("blob.core.windows.net")) return true;
-  if (url.includes("utfs.io") || url.includes("ufs.sh") || url.includes("uploadthing.com")) return true;
-  if (url.includes("firebasestorage.googleapis.com") && url.includes("token=")) return true;
-  if (publicBase && url.startsWith(publicBase)) return true;
-  if (bucket && url.includes(`/${bucket}/`) && url.startsWith("http")) return true;
-  return false;
-}
-
-function objectPathFromFile(filename?: string, location?: string) {
-  if (filename?.startsWith("recordings/")) return filename;
-  const value = location || "";
-  const gs = value.match(/^gs:\/\/[^/]+\/(.+)$/);
-  if (gs?.[1]) return decodeURIComponent(gs[1]);
-  const gcs = value.match(/storage\.googleapis\.com\/[^/]+\/([^?]+)/);
-  if (gcs?.[1]) return decodeURIComponent(gcs[1]);
-  const firebase = value.match(/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/([^?]+)/);
-  if (firebase?.[1]) return decodeURIComponent(firebase[1]);
   return null;
 }
 
-async function firebasePlaybackUrl(objectPath: string) {
-  const config = firebaseConfig();
-  if (!config) return null;
-  const token = randomUUID();
-  const file = getStorage(firebaseAdminApp()).bucket(config.bucket).file(objectPath);
-  await file.setMetadata({
-    contentType: "video/mp4",
-    metadata: { firebaseStorageDownloadTokens: token },
-  });
-  return `https://firebasestorage.googleapis.com/v0/b/${config.bucket}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+function supabasePublicUrl(objectPath: string) {
+  const supabase = supabaseConfig();
+  if (!supabase) return null;
+  const clean = objectPath.replace(/^\/+/, "");
+  return `${supabase.projectUrl}/storage/v1/object/public/${supabase.bucket}/${clean}`;
 }
 
-async function copyToUploadThing(sourceUrl: string) {
-  if (!process.env.UPLOADTHING_TOKEN) return null;
+function resolveSupabasePlaybackUrl(filename?: string, location?: string) {
+  const supabase = supabaseConfig();
+  if (!supabase) return null;
+
+  if (filename?.startsWith("recordings/")) {
+    return supabasePublicUrl(filename);
+  }
+
+  if (!location) return null;
+  if (location.includes("/storage/v1/object/public/")) return location;
+
+  try {
+    const url = new URL(location);
+    const marker = `/${supabase.bucket}/`;
+    const index = url.pathname.indexOf(marker);
+    if (index >= 0) {
+      return supabasePublicUrl(decodeURIComponent(url.pathname.slice(index + marker.length)));
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return null;
+}
+
+function isUploadThingUrl(url: string) {
+  return /utfs\.io|ufs\.sh|uploadthing\.com/i.test(url);
+}
+
+async function copyToUploadThing(sourceUrl: string, fileName: string) {
+  if (!hasUploadThing()) return null;
   const utapi = new UTApi();
-  const result = await utapi.uploadFilesFromUrl(sourceUrl);
-  if (!result || !("data" in result) || !result.data) return null;
-  const data = result.data as { ufsUrl?: string; url?: string };
-  return data.ufsUrl || data.url || null;
+  const result = await utapi.uploadFilesFromUrl({
+    url: sourceUrl,
+    name: fileName.endsWith(".mp4") ? fileName : `${fileName}.mp4`,
+  });
+  if (result.error || !result.data) {
+    console.error("UploadThing rechazó la grabación", result.error);
+    return null;
+  }
+  return result.data.ufsUrl || result.data.url || null;
+}
+
+async function downloadAndUploadToUploadThing(sourceUrl: string, fileName: string) {
+  if (!hasUploadThing()) return null;
+  const response = await fetch(sourceUrl);
+  if (!response.ok) {
+    throw new Error(`No se pudo descargar la grabación temporal (${response.status})`);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const name = fileName.endsWith(".mp4") ? fileName : `${fileName}.mp4`;
+  const file = new UTFile([bytes], name, { type: "video/mp4" });
+  const utapi = new UTApi();
+  const result = await utapi.uploadFiles(file);
+  if (result.error || !result.data) {
+    console.error("UploadThing rechazó la grabación", result.error);
+    return null;
+  }
+  return result.data.ufsUrl || result.data.url || null;
 }
 
 async function publishRecordingUrl(filename?: string, location?: string) {
-  if (location && isPlayableUrl(location)) return location;
+  const supabaseUrl = resolveSupabasePlaybackUrl(filename, location);
+  if (supabaseUrl) return supabaseUrl;
 
-  const objectPath = objectPathFromFile(filename, location);
-  if (objectPath && firebaseConfig()) {
-    return firebasePlaybackUrl(objectPath);
+  if (!location?.startsWith("http")) return null;
+  if (isUploadThingUrl(location)) return location;
+
+  const name = filename?.split("/").pop() || `recording-${Date.now()}.mp4`;
+  try {
+    return (await copyToUploadThing(location, name)) || (await downloadAndUploadToUploadThing(location, name));
+  } catch (error) {
+    console.error("No se pudo publicar la grabación", error);
+    return null;
   }
+}
 
-  if (location?.startsWith("http")) {
-    return (await copyToUploadThing(location)) || location;
+function missingStorageMessage() {
+  if (!supabaseConfig() && !hasUploadThing()) {
+    return "Configura Supabase Storage (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY, SUPABASE_S3_REGION, SUPABASE_STORAGE_BUCKET) para guardar la grabación.";
   }
-
-  return null;
+  return "LiveKit necesita Supabase Storage (recomendado) o Azure/S3 como destino de la grabación.";
 }
 
 export async function startEventRecording(eventId: string) {
   if (recordingStartFailed.has(eventId)) return;
 
-  const file = fileOutput(eventId);
-  if (!file) return;
+  const file = livekitFileOutput(eventId);
+  if (!file) {
+    recordingStartError.set(eventId, missingStorageMessage());
+    return;
+  }
 
   const claim = await db.event.updateMany({
     where: {
@@ -161,6 +214,7 @@ export async function startEventRecording(eventId: string) {
       { screenShare: false, encodingOptions: EncodingOptionsPreset.H264_720P_30 }
     );
     if (!info.egressId) throw new Error("LiveKit no devolvió un identificador de grabación");
+    recordingStartError.delete(eventId);
     await db.event.update({ where: { id: eventId }, data: { egressId: info.egressId } });
   } catch (error) {
     await db.event.update({ where: { id: eventId }, data: { recordingEnabled: false } });
@@ -187,9 +241,9 @@ export async function attachRecordingFile(egressId: string, info: EgressInfo) {
   if (event.recordingUrl) return event.recordingUrl;
 
   const file = info.fileResults?.find((item) => item.location || item.filename) ?? info.file;
-  if (!file) return null;
+  if (!file?.location && !file?.filename) return null;
 
-  const recordingUrl = await publishRecordingUrl(file.filename, file.location);
+  const recordingUrl = await publishRecordingUrl(file?.filename, file?.location);
   if (!recordingUrl) return null;
 
   await db.event.update({
@@ -207,10 +261,11 @@ export async function finalizeEventRecording(eventId: string) {
   if (event.recordingUrl) return { url: event.recordingUrl, error: null };
   if (!event.egressId) {
     const startError = recordingStartError.get(eventId);
-    let error = "No se guardó la grabación. Hace falta el bucket de Firebase o un almacenamiento Azure/S3 para subir el video.";
+    let error = missingStorageMessage();
     if (startError) error = `No se pudo iniciar la grabación: ${startError}`;
-    else if (fileOutput(eventId)) {
-      error = "La transmisión terminó antes de que comenzara la grabación. Conecta OBS y espera a que figure como conectado.";
+    else if (livekitFileOutput(eventId)) {
+      error =
+        "La transmisión terminó antes de que comenzara la grabación. Conecta OBS y espera a que figure como conectado.";
     }
     return { url: null, error };
   }

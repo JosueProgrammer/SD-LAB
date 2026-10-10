@@ -14,7 +14,9 @@ import { getSelf } from "@/lib/auth-service";
 import { db } from "@/lib/db";
 import { allowRecordingRetry, startEventRecording } from "@/lib/recording";
 
-const ingressClient = new IngressClient(process.env.LIVEKIT_API_URL!);
+const ingressClient = new IngressClient(
+  (process.env.LIVEKIT_API_URL || "").replace(/^wss:/i, "https:").replace(/^ws:/i, "http:")
+);
 
 export type ObsLinkStatus = "CONNECTED" | "BUFFERING" | "DISCONNECTED";
 
