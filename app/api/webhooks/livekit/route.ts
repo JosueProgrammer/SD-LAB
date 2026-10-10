@@ -46,7 +46,9 @@ export async function POST(req: Request) {
             where: { ingressId },
             data: { obsConnected: false },
         })
-        for (const item of events) allowRecordingRetry(item.id)
+        for (const item of events) {
+            await allowRecordingRetry(item.id)
+        }
     }
 
     if (event.event === "egress_ended" && event.egressInfo?.egressId) {

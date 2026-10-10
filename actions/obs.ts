@@ -113,7 +113,7 @@ export async function syncEventObsStatus(eventId: string): Promise<ObsLink> {
   if (connected && !event.egressId && !event.recordingUrl) {
     await startEventRecording(eventId);
   }
-  if (!connected) allowRecordingRetry(eventId);
+  if (!connected) await allowRecordingRetry(eventId);
 
   return {
     serverUrl: event.serverUrl,

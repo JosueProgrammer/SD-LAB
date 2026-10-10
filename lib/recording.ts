@@ -27,13 +27,14 @@ function supabaseConfig() {
   const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
   const accessKey = process.env.SUPABASE_S3_ACCESS_KEY;
   const secret = process.env.SUPABASE_S3_SECRET_KEY;
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "recordings";
-  const region = process.env.SUPABASE_S3_REGION;
-  if (!projectUrl || !accessKey || !secret || !region) return null;
+  // Debe ser el nombre del bucket (ej. SD_LAB), no la carpeta "recordings".
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET?.trim();
+  const region = process.env.SUPABASE_S3_REGION?.trim();
+  if (!projectUrl || !accessKey || !secret || !bucket || !region) return null;
 
   const projectRef = projectUrl.match(/^https?:\/\/([^.]+)\.supabase\.co/i)?.[1];
   const endpoint =
-    process.env.SUPABASE_S3_ENDPOINT ||
+    process.env.SUPABASE_S3_ENDPOINT?.replace(/\/$/, "") ||
     (projectRef
       ? `https://${projectRef}.storage.supabase.co/storage/v1/s3`
       : `${projectUrl}/storage/v1/s3`);
@@ -185,6 +186,7 @@ function missingStorageMessage() {
 export async function startEventRecording(eventId: string) {
   if (recordingStartFailed.has(eventId)) return;
 
+  const supabase = supabaseConfig();
   const file = livekitFileOutput(eventId);
   if (!file) {
     recordingStartError.set(eventId, missingStorageMessage());
@@ -196,7 +198,6 @@ export async function startEventRecording(eventId: string) {
       id: eventId,
       egressId: null,
       recordingUrl: null,
-      recordingEnabled: false,
       status: { in: ["APPROVED", "LIVE"] },
     },
     data: { recordingEnabled: true },
@@ -207,29 +208,60 @@ export async function startEventRecording(eventId: string) {
   if (!event) return;
 
   try {
-    const info = await egressClient.startParticipantEgress(
-      event.creatorId,
-      event.creatorId,
-      { file },
-      { screenShare: false, encodingOptions: EncodingOptionsPreset.H264_720P_30 }
-    );
+    console.info("[recording] iniciando egress", {
+      eventId,
+      bucket: supabase?.bucket,
+      endpoint: supabase?.endpoint,
+      filepath: file.filepath,
+    });
+
+    // Room composite captura el stream de OBS en la sala del docente.
+    let info;
+    try {
+      info = await egressClient.startRoomCompositeEgress(
+        event.creatorId,
+        { file },
+        { layout: "speaker", encodingOptions: EncodingOptionsPreset.H264_720P_30 }
+      );
+    } catch (roomError) {
+      console.warn("[recording] room composite falló, probando participant egress", roomError);
+      info = await egressClient.startParticipantEgress(
+        event.creatorId,
+        event.creatorId,
+        { file },
+        { screenShare: false, encodingOptions: EncodingOptionsPreset.H264_720P_30 }
+      );
+    }
+
     if (!info.egressId) throw new Error("LiveKit no devolvió un identificador de grabación");
     recordingStartError.delete(eventId);
     await db.event.update({ where: { id: eventId }, data: { egressId: info.egressId } });
   } catch (error) {
-    await db.event.update({ where: { id: eventId }, data: { recordingEnabled: false } });
+    await db.event.update({
+      where: { id: eventId },
+      data: { recordingEnabled: false, egressId: null },
+    });
     const message = error instanceof Error ? error.message : "";
-    if (/output|upload|storage|bucket|azure|s3|gcp|credentials|permission|denied/i.test(message)) {
+    if (/output|upload|storage|bucket|azure|s3|gcp|credentials|permission|denied|NoSuchBucket/i.test(message)) {
       recordingStartFailed.add(eventId);
-      recordingStartError.set(eventId, message || "LiveKit rechazó el almacenamiento de la grabación.");
+      recordingStartError.set(
+        eventId,
+        message.includes("NoSuchBucket")
+          ? `LiveKit no encontró el bucket "${supabase?.bucket}". Revisa SUPABASE_STORAGE_BUCKET (debe ser SD_LAB, no la carpeta recordings).`
+          : message || "LiveKit rechazó el almacenamiento de la grabación."
+      );
     }
     console.error("No se pudo iniciar la grabación", error);
   }
 }
 
-export function allowRecordingRetry(eventId: string) {
+export async function allowRecordingRetry(eventId: string) {
   recordingStartFailed.delete(eventId);
   recordingStartError.delete(eventId);
+  await db.event.updateMany({
+    where: { id: eventId, egressId: null, recordingUrl: null },
+    data: { recordingEnabled: false },
+  });
 }
 
 export async function attachRecordingFile(egressId: string, info: EgressInfo) {
@@ -298,7 +330,20 @@ export async function finalizeEventRecording(eventId: string) {
       info.status === EgressStatus.EGRESS_ABORTED ||
       info.status === EgressStatus.EGRESS_LIMIT_REACHED
     ) {
-      return { url: null, error: info.error || "LiveKit no pudo guardar la grabación." };
+      const detail = info.error || "LiveKit no pudo guardar la grabación.";
+      if (/NoSuchBucket/i.test(detail)) {
+        return {
+          url: null,
+          error: `LiveKit no encontró el bucket "${supabaseConfig()?.bucket}". En Supabase el bucket debe llamarse exactamente como SUPABASE_STORAGE_BUCKET (ej. SD_LAB). También sube el límite de tamaño del bucket (por defecto 50 MiB es insuficiente para video).`,
+        };
+      }
+      if (/EntityTooLarge|maximum allowed size|Payload Too Large|413/i.test(detail)) {
+        return {
+          url: null,
+          error: "El video supera el límite del bucket de Supabase. En Storage → Edit bucket sube el File size limit (por ejemplo 5 GB).",
+        };
+      }
+      return { url: null, error: detail };
     }
 
     if (info.status !== EgressStatus.EGRESS_COMPLETE) {
