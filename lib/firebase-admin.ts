@@ -12,7 +12,12 @@ function getFirebaseAdmin() {
     throw new Error("Firebase Admin is not configured. Add FIREBASE_ADMIN_CLIENT_EMAIL and FIREBASE_ADMIN_PRIVATE_KEY.");
   }
 
-  return initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+  return initializeApp({
+    credential: cert({ projectId, clientEmail, privateKey }),
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  });
 }
+
+export const firebaseAdminApp = () => getFirebaseAdmin();
 
 export const firebaseAdminAuth = () => getAuth(getFirebaseAdmin());

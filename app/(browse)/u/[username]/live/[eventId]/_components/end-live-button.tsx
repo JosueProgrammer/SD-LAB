@@ -18,9 +18,15 @@ export function EndLiveButton({ eventId, username }: EndLiveButtonProps) {
   const handleEnd = () => {
     startTransition(async () => {
       try {
-        await endEventLive(eventId);
-        toast.success("Transmisión finalizada correctamente.");
-        router.push(`/u/${username}/live`);
+        const recording = await endEventLive(eventId);
+        if (recording.recordingUrl) {
+          toast.success("Transmisión finalizada. La grabación quedó en el repositorio.");
+        } else if (recording.recordingError) {
+          toast.error(recording.recordingError);
+        } else {
+          toast.success("Transmisión finalizada. La grabación aparecerá en el repositorio en cuanto termine de guardarse.");
+        }
+        router.push(`/u/${username}/repository`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Error al finalizar transmisión";
         toast.error(msg);

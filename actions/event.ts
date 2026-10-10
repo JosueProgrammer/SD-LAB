@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { getSelf, requireRole } from "@/lib/auth-service";
+import { finalizeEventRecording, startEventRecording } from "@/lib/recording";
 import { EventStatus, EventType, InvitationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -403,6 +404,7 @@ export async function startEventLive(eventId: string) {
 
   revalidatePath(`/u/${self.username}/live`);
   revalidatePath(`/u/${self.username}/live/${eventId}`);
+  await startEventRecording(eventId);
   return updatedEvent;
 }
 
@@ -410,23 +412,30 @@ export async function endEventLive(eventId: string) {
   const self = await getSelf();
   if (!self) throw new Error("No autenticado");
 
-  const event = await db.event.findUnique({ where: { id: eventId } });
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    include: { creator: { select: { username: true } } },
+  });
   if (!event) throw new Error("Evento no encontrado");
 
   if (event.creatorId !== self.id && self.role !== "ADMIN") {
     throw new Error("No tienes permisos para finalizar este evento");
   }
 
-  const updatedEvent = await db.event.update({
+  const recording = await finalizeEventRecording(eventId);
+  await db.event.update({
     where: { id: eventId },
     data: {
       status: "FINISHED",
       isLive: false,
+      obsConnected: false,
       actualEndTime: new Date(),
     },
   });
 
   revalidatePath(`/u/${self.username}/live`);
   revalidatePath(`/u/${self.username}/live/${eventId}`);
-  return updatedEvent;
+  revalidatePath(`/u/${event.creator.username}/repository`);
+  revalidatePath(`/u/${event.creator.username}/repository/${eventId}`);
+  return { recordingUrl: recording.url, recordingError: recording.error };
 }

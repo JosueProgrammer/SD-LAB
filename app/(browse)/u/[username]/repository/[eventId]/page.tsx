@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { getSelf } from "@/lib/auth-service";
 import { getGuestRepositoryRecording, getRepositoryRecording } from "@/lib/event-service";
 import { notFound } from "next/navigation";
@@ -36,9 +37,20 @@ export default async function RecordingPage({ params }: { params: Promise<{ even
           </span>
         </div>
       </div>
-      <video className="aspect-video w-full rounded-xl bg-black" controls preload="metadata" src={event.recordingUrl}>
+      <video
+        className="aspect-video w-full rounded-xl bg-black"
+        controls
+        preload="metadata"
+        poster={event.thumbnailUrl ?? undefined}
+        src={event.recordingUrl}
+      >
         Tu navegador no admite la reproducción de video.
       </video>
+      {event.thumbnailUrl && (
+        <div className="relative aspect-video max-w-xs overflow-hidden rounded-xl border">
+          <Image src={event.thumbnailUrl} alt={`Miniatura de ${event.title}`} fill className="object-cover" />
+        </div>
+      )}
     </main>
   );
 }

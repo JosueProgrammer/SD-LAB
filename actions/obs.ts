@@ -12,6 +12,7 @@ import { TrackSource } from "livekit-server-sdk/dist/proto/livekit_models";
 import { revalidatePath } from "next/cache";
 import { getSelf } from "@/lib/auth-service";
 import { db } from "@/lib/db";
+import { allowRecordingRetry, startEventRecording } from "@/lib/recording";
 
 const ingressClient = new IngressClient(process.env.LIVEKIT_API_URL!);
 
@@ -107,6 +108,10 @@ export async function syncEventObsStatus(eventId: string): Promise<ObsLink> {
   if (event.obsConnected !== connected) {
     await db.event.update({ where: { id: eventId }, data: { obsConnected: connected } });
   }
+  if (connected && !event.egressId && !event.recordingUrl) {
+    await startEventRecording(eventId);
+  }
+  if (!connected) allowRecordingRetry(eventId);
 
   return {
     serverUrl: event.serverUrl,
