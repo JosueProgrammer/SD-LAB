@@ -56,10 +56,13 @@ export default async function LiveEventPage({ params }: LiveEventPageProps) {
           endTime: event.endTime,
           location: event.location,
           isLive: event.isLive,
+          playbackUrl: event.playbackUrl,
+          obsConnected: event.obsConnected,
         }}
         hostId={event.creator.id}
         hostUsername={event.creator.username}
         username={username}
+        viewerName={self.username}
         canManage={isHost}
       />
     </div>

@@ -1,41 +1,28 @@
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
-import { JwtPayload, jwtDecode } from "jwt-decode";
-import { createViewerToken } from "@/actions/token";
+import { createViewerToken, type ViewerIdentity } from "@/actions/token";
 
-export function useViewerToken(hostIdentity: string) {
-  const [token, setToken] = useState("");
-  const [name, setName] = useState("");
+export const useViewerToken = (hostIdentity: string) => {
   const [identity, setIdentity] = useState("");
+  const [name, setName] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const createToken = async () => {
-      try {
-        const viewerToken = await createViewerToken(hostIdentity);
-        setToken(viewerToken);
-
-        const decodedToken = jwtDecode(viewerToken) as JwtPayload & {
-          name?: string;
-        };
-        const name = decodedToken?.name
-        const identity = decodedToken.jti
-
-        if (identity) {
-            setIdentity(identity)
-        }
-
-        if (name) {
-            setName(name)
-        }
-
-      } catch {
-        toast.error("Something went wrong");
-      }
+    let cancelled = false;
+    createViewerToken(hostIdentity)
+      .then((token: ViewerIdentity) => {
+        if (cancelled) return;
+        setIdentity(token.identity);
+        setName(token.name);
+        setReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("No se pudo unir a la transmisión");
+      });
+    return () => {
+      cancelled = true;
     };
-    createToken()
   }, [hostIdentity]);
 
-  return {
-    token, name, identity
-  }
-}
+  return { identity, name, ready };
+};

@@ -1,24 +1,9 @@
+import { promises as fs } from "fs";
+import path from "path";
 import { UTApi, UTFile } from "uploadthing/server";
-import {
-  EgressClient,
-  EncodedFileType,
-  EncodingOptionsPreset,
-  type EgressInfo,
-  type EncodedFileOutput,
-} from "livekit-server-sdk";
-import { EgressStatus } from "livekit-server-sdk/dist/proto/livekit_egress";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-
-const livekitHost = (process.env.LIVEKIT_API_URL || "")
-  .replace(/^wss:/i, "https:")
-  .replace(/^ws:/i, "http:");
-
-const egressClient = new EgressClient(
-  livekitHost,
-  process.env.LIVEKIT_API_KEY,
-  process.env.LIVEKIT_API_SECRET
-);
+import { recordingsDir } from "@/lib/mediamtx";
 
 const recordingStartFailed = new Set<string>();
 const recordingStartError = new Map<string, string>();
@@ -27,7 +12,6 @@ function supabaseConfig() {
   const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
   const accessKey = process.env.SUPABASE_S3_ACCESS_KEY;
   const secret = process.env.SUPABASE_S3_SECRET_KEY;
-  // Debe ser el nombre del bucket (ej. SD_LAB), no la carpeta "recordings".
   const bucket = process.env.SUPABASE_STORAGE_BUCKET?.trim();
   const region = process.env.SUPABASE_S3_REGION?.trim();
   if (!projectUrl || !accessKey || !secret || !bucket || !region) return null;
@@ -46,111 +30,54 @@ function hasUploadThing() {
   return Boolean(process.env.UPLOADTHING_TOKEN);
 }
 
-function livekitFileOutput(eventId: string): EncodedFileOutput | null {
-  const filepath = `recordings/${eventId}-${Date.now()}.mp4`;
-  const base = { fileType: EncodedFileType.MP4, filepath, disableManifest: true };
-
-  const supabase = supabaseConfig();
-  if (supabase) {
-    return {
-      ...base,
-      s3: {
-        accessKey: supabase.accessKey,
-        secret: supabase.secret,
-        region: supabase.region,
-        bucket: supabase.bucket,
-        endpoint: supabase.endpoint,
-        forcePathStyle: true,
-      },
-    };
+function missingStorageMessage() {
+  if (!supabaseConfig() && !hasUploadThing()) {
+    return "Configura Supabase Storage (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY, SUPABASE_S3_REGION, SUPABASE_STORAGE_BUCKET) para guardar la grabación.";
   }
-
-  const account = process.env.AZURE_STORAGE_ACCOUNT;
-  const accountKey = process.env.AZURE_STORAGE_KEY;
-  const container = process.env.AZURE_STORAGE_CONTAINER;
-  if (account && accountKey && container && hasUploadThing()) {
-    return { ...base, azure: { accountName: account, accountKey, containerName: container } };
-  }
-
-  const accessKey = process.env.S3_ACCESS_KEY;
-  const secret = process.env.S3_SECRET_KEY;
-  const bucket = process.env.S3_BUCKET;
-  if (accessKey && secret && bucket && hasUploadThing()) {
-    return {
-      ...base,
-      s3: {
-        accessKey,
-        secret,
-        region: process.env.S3_REGION || "us-east-1",
-        bucket,
-        endpoint: process.env.S3_ENDPOINT || undefined,
-        forcePathStyle: Boolean(process.env.S3_ENDPOINT),
-      },
-    };
-  }
-
-  return null;
+  return "Se necesita Supabase Storage o UploadThing para publicar la grabación.";
 }
 
-function supabasePublicUrl(objectPath: string) {
-  const supabase = supabaseConfig();
-  if (!supabase) return null;
-  const clean = objectPath.replace(/^\/+/, "");
-  return `${supabase.projectUrl}/storage/v1/object/public/${supabase.bucket}/${clean}`;
-}
-
-function resolveSupabasePlaybackUrl(filename?: string, location?: string) {
-  const supabase = supabaseConfig();
-  if (!supabase) return null;
-
-  if (filename?.startsWith("recordings/")) {
-    return supabasePublicUrl(filename);
-  }
-
-  if (!location) return null;
-  if (location.includes("/storage/v1/object/public/")) return location;
-
+async function walkFiles(dir: string): Promise<string[]> {
   try {
-    const url = new URL(location);
-    const marker = `/${supabase.bucket}/`;
-    const index = url.pathname.indexOf(marker);
-    if (index >= 0) {
-      return supabasePublicUrl(decodeURIComponent(url.pathname.slice(index + marker.length)));
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const files: string[] = [];
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) files.push(...(await walkFiles(full)));
+      else if (/\.(mp4|m4v|mkv)$/i.test(entry.name)) files.push(full);
     }
+    return files;
   } catch {
-    /* ignore */
+    return [];
   }
-
-  return null;
 }
 
-function isUploadThingUrl(url: string) {
-  return /utfs\.io|ufs\.sh|uploadthing\.com/i.test(url);
+async function findLatestRecording(streamPath: string): Promise<string | null> {
+  const base = path.join(recordingsDir(), streamPath);
+  const files = await walkFiles(base);
+  if (files.length === 0) return null;
+
+  const withStats = await Promise.all(
+    files.map(async (file) => {
+      const stat = await fs.stat(file);
+      return { file, mtime: stat.mtimeMs, size: stat.size };
+    })
+  );
+
+  withStats.sort((a, b) => b.mtime - a.mtime);
+  const best = withStats.find((item) => item.size > 1024) ?? withStats[0];
+  return best?.file ?? null;
 }
 
-async function copyToUploadThing(sourceUrl: string, fileName: string) {
+async function uploadBytesToSupabase(objectPath: string, bytes: Uint8Array) {
+  const { uploadMp4ToSupabase } = await import("@/lib/recording-upload");
+  return uploadMp4ToSupabase(objectPath, bytes);
+}
+
+async function uploadToUploadThing(bytes: Uint8Array, fileName: string) {
   if (!hasUploadThing()) return null;
-  const utapi = new UTApi();
-  const result = await utapi.uploadFilesFromUrl({
-    url: sourceUrl,
-    name: fileName.endsWith(".mp4") ? fileName : `${fileName}.mp4`,
-  });
-  if (result.error || !result.data) {
-    console.error("UploadThing rechazó la grabación", result.error);
-    return null;
-  }
-  return result.data.ufsUrl || result.data.url || null;
-}
-
-async function downloadAndUploadToUploadThing(sourceUrl: string, fileName: string) {
-  if (!hasUploadThing()) return null;
-  const response = await fetch(sourceUrl);
-  if (!response.ok) {
-    throw new Error(`No se pudo descargar la grabación temporal (${response.status})`);
-  }
-  const bytes = new Uint8Array(await response.arrayBuffer());
   const name = fileName.endsWith(".mp4") ? fileName : `${fileName}.mp4`;
-  const file = new UTFile([bytes], name, { type: "video/mp4" });
+  const file = new UTFile([Buffer.from(bytes)], name, { type: "video/mp4" });
   const utapi = new UTApi();
   const result = await utapi.uploadFiles(file);
   if (result.error || !result.data) {
@@ -160,35 +87,24 @@ async function downloadAndUploadToUploadThing(sourceUrl: string, fileName: strin
   return result.data.ufsUrl || result.data.url || null;
 }
 
-async function publishRecordingUrl(filename?: string, location?: string) {
-  const supabaseUrl = resolveSupabasePlaybackUrl(filename, location);
-  if (supabaseUrl) return supabaseUrl;
+async function publishLocalRecording(filePath: string, eventId: string) {
+  const bytes = new Uint8Array(await fs.readFile(filePath));
+  const fileName = `recordings/${eventId}-${Date.now()}.mp4`;
 
-  if (!location?.startsWith("http")) return null;
-  if (isUploadThingUrl(location)) return location;
-
-  const name = filename?.split("/").pop() || `recording-${Date.now()}.mp4`;
-  try {
-    return (await copyToUploadThing(location, name)) || (await downloadAndUploadToUploadThing(location, name));
-  } catch (error) {
-    console.error("No se pudo publicar la grabación", error);
-    return null;
+  const supabase = supabaseConfig();
+  if (supabase) {
+    // Subida vía S3-compatible firmada no está cableada aquí; usar UploadThing si falla.
+    const viaPut = await uploadBytesToSupabase(fileName, bytes);
+    if (viaPut) return viaPut;
   }
-}
 
-function missingStorageMessage() {
-  if (!supabaseConfig() && !hasUploadThing()) {
-    return "Configura Supabase Storage (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY, SUPABASE_S3_REGION, SUPABASE_STORAGE_BUCKET) para guardar la grabación.";
-  }
-  return "LiveKit necesita Supabase Storage (recomendado) o Azure/S3 como destino de la grabación.";
+  return uploadToUploadThing(bytes, path.basename(fileName));
 }
 
 export async function startEventRecording(eventId: string) {
   if (recordingStartFailed.has(eventId)) return;
 
-  const supabase = supabaseConfig();
-  const file = livekitFileOutput(eventId);
-  if (!file) {
+  if (!supabaseConfig() && !hasUploadThing()) {
     recordingStartError.set(eventId, missingStorageMessage());
     return;
   }
@@ -199,58 +115,36 @@ export async function startEventRecording(eventId: string) {
       egressId: null,
       recordingUrl: null,
       status: { in: ["APPROVED", "LIVE"] },
+      streamPath: { not: null },
     },
     data: { recordingEnabled: true },
   });
   if (claim.count !== 1) return;
 
-  const event = await db.event.findUnique({ where: { id: eventId }, select: { creatorId: true } });
-  if (!event) return;
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { streamPath: true },
+  });
+  if (!event?.streamPath) return;
 
   try {
-    console.info("[recording] iniciando egress", {
-      eventId,
-      bucket: supabase?.bucket,
-      endpoint: supabase?.endpoint,
-      filepath: file.filepath,
-    });
-
-    // Room composite captura el stream de OBS en la sala del docente.
-    let info;
-    try {
-      info = await egressClient.startRoomCompositeEgress(
-        event.creatorId,
-        { file },
-        { layout: "speaker", encodingOptions: EncodingOptionsPreset.H264_720P_30 }
-      );
-    } catch (roomError) {
-      console.warn("[recording] room composite falló, probando participant egress", roomError);
-      info = await egressClient.startParticipantEgress(
-        event.creatorId,
-        event.creatorId,
-        { file },
-        { screenShare: false, encodingOptions: EncodingOptionsPreset.H264_720P_30 }
-      );
-    }
-
-    if (!info.egressId) throw new Error("LiveKit no devolvió un identificador de grabación");
+    // Marcamos el path de MediaMTX como "job" de grabación (record automático del servidor).
     recordingStartError.delete(eventId);
-    await db.event.update({ where: { id: eventId }, data: { egressId: info.egressId } });
+    await db.event.update({
+      where: { id: eventId },
+      data: { egressId: `mtx:${event.streamPath}` },
+    });
+    console.info("[recording] MediaMTX record activo", { eventId, streamPath: event.streamPath });
   } catch (error) {
     await db.event.update({
       where: { id: eventId },
       data: { recordingEnabled: false, egressId: null },
     });
-    const message = error instanceof Error ? error.message : "";
-    if (/output|upload|storage|bucket|azure|s3|gcp|credentials|permission|denied|NoSuchBucket/i.test(message)) {
-      recordingStartFailed.add(eventId);
-      recordingStartError.set(
-        eventId,
-        message.includes("NoSuchBucket")
-          ? `LiveKit no encontró el bucket "${supabase?.bucket}". Revisa SUPABASE_STORAGE_BUCKET (debe ser SD_LAB, no la carpeta recordings).`
-          : message || "LiveKit rechazó el almacenamiento de la grabación."
-      );
-    }
+    recordingStartFailed.add(eventId);
+    recordingStartError.set(
+      eventId,
+      error instanceof Error ? error.message : "No se pudo preparar la grabación"
+    );
     console.error("No se pudo iniciar la grabación", error);
   }
 }
@@ -264,97 +158,64 @@ export async function allowRecordingRetry(eventId: string) {
   });
 }
 
-export async function attachRecordingFile(egressId: string, info: EgressInfo) {
-  const event = await db.event.findFirst({
-    where: { egressId },
+export async function finalizeEventRecording(eventId: string) {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
     include: { creator: { select: { username: true } } },
   });
-  if (!event) return null;
-  if (event.recordingUrl) return event.recordingUrl;
-
-  const file = info.fileResults?.find((item) => item.location || item.filename) ?? info.file;
-  if (!file?.location && !file?.filename) return null;
-
-  const recordingUrl = await publishRecordingUrl(file?.filename, file?.location);
-  if (!recordingUrl) return null;
-
-  await db.event.update({
-    where: { id: event.id },
-    data: { recordingUrl, recordingEnabled: true },
-  });
-  revalidatePath(`/u/${event.creator.username}/repository`);
-  revalidatePath(`/u/${event.creator.username}/repository/${event.id}`);
-  return recordingUrl;
-}
-
-export async function finalizeEventRecording(eventId: string) {
-  const event = await db.event.findUnique({ where: { id: eventId } });
   if (!event) return { url: null as string | null, error: null as string | null };
   if (event.recordingUrl) return { url: event.recordingUrl, error: null };
-  if (!event.egressId) {
+
+  if (!event.streamPath && !event.egressId) {
     const startError = recordingStartError.get(eventId);
-    let error = missingStorageMessage();
-    if (startError) error = `No se pudo iniciar la grabación: ${startError}`;
-    else if (livekitFileOutput(eventId)) {
-      error =
-        "La transmisión terminó antes de que comenzara la grabación. Conecta OBS y espera a que figure como conectado.";
-    }
-    return { url: null, error };
+    return {
+      url: null,
+      error: startError
+        ? `No se pudo iniciar la grabación: ${startError}`
+        : "No hay transmisión asociada para grabar. Genera la clave OBS y transmite antes de finalizar.",
+    };
+  }
+
+  const streamPath =
+    event.streamPath ||
+    (event.egressId?.startsWith("mtx:") ? event.egressId.slice(4) : null);
+
+  if (!streamPath) {
+    return { url: null, error: missingStorageMessage() };
   }
 
   try {
-    let info: EgressInfo | undefined;
-    try {
-      info = await egressClient.stopEgress(event.egressId);
-    } catch {
-      const listed = await egressClient.listEgress({ egressId: event.egressId });
-      info = listed[0];
+    // Espera breve a que MediaMTX cierre el segmento
+    let filePath: string | null = null;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      filePath = await findLatestRecording(streamPath);
+      if (filePath) break;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 
-    for (let attempt = 0; attempt < 15; attempt += 1) {
-      if (!info) break;
-      const done =
-        info.status === EgressStatus.EGRESS_COMPLETE ||
-        info.status === EgressStatus.EGRESS_FAILED ||
-        info.status === EgressStatus.EGRESS_ABORTED ||
-        info.status === EgressStatus.EGRESS_LIMIT_REACHED;
-      if (done) break;
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const listed = await egressClient.listEgress({ egressId: event.egressId });
-      if (listed[0]) info = listed[0];
+    if (!filePath) {
+      return {
+        url: null,
+        error:
+          "No se encontró el archivo de grabación en MediaMTX. Verifica MEDIAMTX_RECORDINGS_DIR y que el volumen /recordings esté montado.",
+      };
     }
 
-    if (!info) return { url: null, error: "No se pudo obtener la grabación." };
-    if (
-      info.status === EgressStatus.EGRESS_FAILED ||
-      info.status === EgressStatus.EGRESS_ABORTED ||
-      info.status === EgressStatus.EGRESS_LIMIT_REACHED
-    ) {
-      const detail = info.error || "LiveKit no pudo guardar la grabación.";
-      if (/NoSuchBucket/i.test(detail)) {
-        return {
-          url: null,
-          error: `LiveKit no encontró el bucket "${supabaseConfig()?.bucket}". En Supabase el bucket debe llamarse exactamente como SUPABASE_STORAGE_BUCKET (ej. SD_LAB). También sube el límite de tamaño del bucket (por defecto 50 MiB es insuficiente para video).`,
-        };
-      }
-      if (/EntityTooLarge|maximum allowed size|Payload Too Large|413/i.test(detail)) {
-        return {
-          url: null,
-          error: "El video supera el límite del bucket de Supabase. En Storage → Edit bucket sube el File size limit (por ejemplo 5 GB).",
-        };
-      }
-      return { url: null, error: detail };
+    const recordingUrl = await publishLocalRecording(filePath, eventId);
+    if (!recordingUrl) {
+      return {
+        url: null,
+        error: "La grabación existe en disco, pero no se pudo publicar en el almacenamiento.",
+      };
     }
 
-    if (info.status !== EgressStatus.EGRESS_COMPLETE) {
-      return { url: null, error: null };
-    }
-
-    const url = await attachRecordingFile(event.egressId, info);
-    return {
-      url,
-      error: url ? null : "La grabación terminó, pero no se pudo publicar el archivo.",
-    };
+    await db.event.update({
+      where: { id: event.id },
+      data: { recordingUrl, recordingEnabled: true },
+    });
+    revalidatePath(`/u/${event.creator.username}/repository`);
+    revalidatePath(`/u/${event.creator.username}/repository/${event.id}`);
+    return { url: recordingUrl, error: null };
   } catch (error) {
     console.error(error);
     return {

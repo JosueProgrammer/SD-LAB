@@ -19,7 +19,8 @@ export async function getUserByUsername  (username: string) {
                     isChatEnabled: true,
                     isChatFollowersOnly: true,
                     thumbnaiUrl: true,
-                    name: true
+                    name: true,
+                    playbackUrl: true,
                 },
             },
             _count: {

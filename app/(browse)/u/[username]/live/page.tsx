@@ -156,6 +156,7 @@ export default async function LivePage({ params }: LivePageProps) {
                 participants: event._count.participants,
                 serverUrl: event.serverUrl,
                 streamKey: event.streamKey,
+                playbackUrl: event.playbackUrl,
                 obsConnected: event.obsConnected,
               }}
             />

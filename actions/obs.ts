@@ -1,37 +1,21 @@
 "use server";
 
-import {
-  IngressAudioEncodingPreset,
-  IngressClient,
-  IngressInput,
-  IngressVideoEncodingPreset,
-  type IngressInfo,
-} from "livekit-server-sdk";
-import { IngressState_Status } from "livekit-server-sdk/dist/proto/livekit_ingress";
-import { TrackSource } from "livekit-server-sdk/dist/proto/livekit_models";
 import { revalidatePath } from "next/cache";
 import { getSelf } from "@/lib/auth-service";
 import { db } from "@/lib/db";
+import { createStreamCredentials, isPathPublishing } from "@/lib/mediamtx";
+import { isObsStreaming } from "@/lib/obs-websocket";
 import { allowRecordingRetry, startEventRecording } from "@/lib/recording";
-
-const ingressClient = new IngressClient(
-  (process.env.LIVEKIT_API_URL || "").replace(/^wss:/i, "https:").replace(/^ws:/i, "http:")
-);
 
 export type ObsLinkStatus = "CONNECTED" | "BUFFERING" | "DISCONNECTED";
 
 export type ObsLink = {
   serverUrl: string | null;
   streamKey: string | null;
+  playbackUrl: string | null;
   status: ObsLinkStatus;
   connected: boolean;
 };
-
-function statusOf(ingress?: IngressInfo): ObsLinkStatus {
-  if (ingress?.state?.status === IngressState_Status.ENDPOINT_PUBLISHING) return "CONNECTED";
-  if (ingress?.state?.status === IngressState_Status.ENDPOINT_BUFFERING) return "BUFFERING";
-  return "DISCONNECTED";
-}
 
 async function ownedEvent(eventId: string) {
   const self = await getSelf();
@@ -47,61 +31,64 @@ async function ownedEvent(eventId: string) {
 }
 
 export async function createEventObsIngress(eventId: string): Promise<ObsLink> {
-  const { self, event } = await ownedEvent(eventId);
-
-  const existing = await ingressClient.listIngress({ roomName: self.id });
-  for (const item of existing) {
-    if (item.ingressId) await ingressClient.deleteIngress(item.ingressId);
-  }
-
-  const ingress = await ingressClient.createIngress(IngressInput.RTMP_INPUT, {
-    name: event.title,
-    roomName: self.id,
-    participantIdentity: self.id,
-    participantName: self.username,
-    video: {
-      source: TrackSource.CAMERA,
-      preset: IngressVideoEncodingPreset.H264_1080P_30FPS_3_LAYERS,
-    },
-    audio: {
-      source: TrackSource.MICROPHONE,
-      preset: IngressAudioEncodingPreset.OPUS_STEREO_96KBPS,
-    },
-  });
-
-  if (!ingress.ingressId || !ingress.url || !ingress.streamKey) {
-    throw new Error("No se pudo generar la clave de OBS");
-  }
+  const { self } = await ownedEvent(eventId);
+  const creds = createStreamCredentials("evt");
 
   await db.event.updateMany({
     where: { creatorId: self.id, NOT: { id: eventId } },
-    data: { ingressId: null, serverUrl: null, streamKey: null, obsConnected: false },
+    data: {
+      streamPath: null,
+      serverUrl: null,
+      streamKey: null,
+      playbackUrl: null,
+      obsConnected: false,
+    },
   });
 
   await db.event.update({
     where: { id: eventId },
     data: {
-      ingressId: ingress.ingressId,
-      serverUrl: ingress.url,
-      streamKey: ingress.streamKey,
+      streamPath: creds.streamPath,
+      serverUrl: creds.serverUrl,
+      streamKey: creds.streamKey,
+      playbackUrl: creds.playbackUrl,
       obsConnected: false,
     },
   });
 
   revalidatePath(`/u/${self.username}/live`);
-  return { serverUrl: ingress.url, streamKey: ingress.streamKey, status: "DISCONNECTED", connected: false };
+  return {
+    serverUrl: creds.serverUrl,
+    streamKey: creds.streamKey,
+    playbackUrl: creds.playbackUrl,
+    status: "DISCONNECTED",
+    connected: false,
+  };
 }
 
 export async function syncEventObsStatus(eventId: string): Promise<ObsLink> {
   const { event } = await ownedEvent(eventId);
-  if (!event.ingressId) {
-    return { serverUrl: null, streamKey: null, status: "DISCONNECTED", connected: false };
+  if (!event.streamPath) {
+    return {
+      serverUrl: null,
+      streamKey: null,
+      playbackUrl: null,
+      status: "DISCONNECTED",
+      connected: false,
+    };
   }
 
   let status: ObsLinkStatus = event.obsConnected ? "CONNECTED" : "DISCONNECTED";
+
   try {
-    const items = await ingressClient.listIngress({ ingressId: event.ingressId });
-    status = statusOf(items[0]);
+    const publishing = await isPathPublishing(event.streamPath);
+    if (publishing) {
+      status = "CONNECTED";
+    } else {
+      const obs = await isObsStreaming();
+      if (obs === true) status = "BUFFERING";
+      else status = "DISCONNECTED";
+    }
   } catch {
     status = event.obsConnected ? "CONNECTED" : "DISCONNECTED";
   }
@@ -118,6 +105,7 @@ export async function syncEventObsStatus(eventId: string): Promise<ObsLink> {
   return {
     serverUrl: event.serverUrl,
     streamKey: event.streamKey,
+    playbackUrl: event.playbackUrl,
     status,
     connected,
   };

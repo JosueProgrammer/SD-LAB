@@ -1,7 +1,6 @@
 "use client";
 
 import { useViewerToken } from "@/hooks/use-viewer-token";
-import { LiveKitRoom } from "@livekit/components-react";
 import { Video, VideoSkeleton } from "./Video";
 import { cn } from "@/lib/utils";
 import { useChatSidebar } from "@/store/use-chat-sidebar";
@@ -12,36 +11,38 @@ import { InfoCard } from "./info-card";
 import { AboutCard } from "./about-card";
 
 type CustomStream = {
-  id: string
-  isChatEnabled: boolean
-  isChatDelayed: boolean
-  isChatFollowersOnly: boolean
-  isLive: boolean
-  thumbnaiUrl: string | null
-  name: string
-}
+  id: string;
+  isChatEnabled: boolean;
+  isChatDelayed: boolean;
+  isChatFollowersOnly: boolean;
+  isLive: boolean;
+  thumbnaiUrl: string | null;
+  name: string;
+  playbackUrl?: string | null;
+};
 
 type CustomUser = {
-  id: string
-  username: string
-  bio: string | null
-  stream: CustomStream | null
-  imageUrl: string
-  _count: {followedBy: number}
-}
+  id: string;
+  username: string;
+  bio: string | null;
+  stream: CustomStream | null;
+  imageUrl: string;
+  _count: { followedBy: number };
+};
 
 interface StreamPlayerProps {
-  user: CustomUser
+  user: CustomUser;
   stream: CustomStream;
   isFollowing: boolean;
 }
 
 export function StreamPlayer({ user, stream, isFollowing }: StreamPlayerProps) {
-  const { token, name, identity } = useViewerToken(user.id);
+  const { name, identity, ready } = useViewerToken(user.id);
   const { collapsed } = useChatSidebar((state) => state);
+  const roomKey = user.id;
 
-  if (!token || !name || !identity) {
-    return <StreamPlayerSkeleton />
+  if (!ready || !name || !identity) {
+    return <StreamPlayerSkeleton />;
   }
 
   return (
@@ -51,31 +52,35 @@ export function StreamPlayer({ user, stream, isFollowing }: StreamPlayerProps) {
           <ChatToggle />
         </div>
       )}
-      <LiveKitRoom
-        token={token}
-        serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL!}
+      <div
         className={cn(
           "grid grid-cols-1 lg:gap-y-0 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-6 h-full",
           collapsed && "lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2"
         )}
       >
         <div className="space-y-4 col-span-1 lg:col-span-2 xl:col-span-2 2xl:col-span-5 lg:overflow-y-auto hidden-scrollbar pb-10">
-          <Video hostName={user.username} hostIdentity={user.id} />
+          <Video
+            hostName={user.username}
+            playbackUrl={stream.playbackUrl}
+            isLive={stream.isLive}
+          />
           <Header
+            roomKey={roomKey}
             hostName={user.username}
             hostIdentity={user.id}
             viewerIdentity={identity}
             imageUrl={user.imageUrl}
             isFollowing={isFollowing}
             name={stream.name}
+            isLive={stream.isLive}
           />
-          <InfoCard 
+          <InfoCard
             hostIdentity={user.id}
             viewerIdentity={identity}
             name={stream.name}
             thumbnaiUrl={stream.thumbnaiUrl}
           />
-          <AboutCard 
+          <AboutCard
             hostName={user.username}
             hostIdentity={user.id}
             viewerIdentity={identity}
@@ -85,6 +90,7 @@ export function StreamPlayer({ user, stream, isFollowing }: StreamPlayerProps) {
         </div>
         <div className={cn("col-span-1", collapsed && "hidden")}>
           <Chat
+            roomKey={roomKey}
             viewerName={name}
             hostName={user.username}
             hostIdentity={user.id}
@@ -92,23 +98,24 @@ export function StreamPlayer({ user, stream, isFollowing }: StreamPlayerProps) {
             isChatEnabled={stream.isChatEnabled}
             isChatDelayed={stream.isChatDelayed}
             isChatFollowersOnly={stream.isChatFollowersOnly}
+            isLive={stream.isLive}
           />
         </div>
-      </LiveKitRoom>
+      </div>
     </>
   );
 }
 
-export function StreamPlayerSkeleton () {
+export function StreamPlayerSkeleton() {
   return (
     <div className="grid grid-cols-1 lg:gap-y-0 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-6 h-full">
       <div className="space-y-4 col-span-1 lg:col-span-2 xl:col-span-2 2xl:col-span-5 lg:overflow-y-auto hidden-scrollbar pb-10">
-        <VideoSkeleton /> 
+        <VideoSkeleton />
         <HeaderSkeleton />
       </div>
       <div className="col-span-1 bg-background">
         <ChatSkeleton />
       </div>
     </div>
-  )
+  );
 }

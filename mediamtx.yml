@@ -1,0 +1,59 @@
+# MediaMTX — OBS RTMP ingest → HLS playback
+logLevel: info
+logDestinations: [stdout]
+
+api: yes
+apiAddress: :9997
+
+rtmp: yes
+rtmpAddress: :1935
+
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+hlsAllowOrigin: "*"
+
+webrtc: no
+srt: no
+rtsp: no
+
+# Lab: publicación/lectura abiertas; la protección real es el streamKey opaco (path).
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass: ""
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+
+pathDefaults:
+  record: yes
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 48h
+
+  runOnReady: >
+    curl -sS -X POST "http://host.docker.internal:3000/api/webhooks/mediamtx"
+    -H "Content-Type: application/json"
+    -d "{\"action\":\"ready\",\"path\":\"$MTX_PATH\"}"
+    || true
+  runOnReadyRestart: no
+
+  runOnNotReady: >
+    curl -sS -X POST "http://host.docker.internal:3000/api/webhooks/mediamtx"
+    -H "Content-Type: application/json"
+    -d "{\"action\":\"notready\",\"path\":\"$MTX_PATH\"}"
+    || true
+
+paths:
+  all_others:

@@ -48,7 +48,7 @@ console.log("configured_bucket", bucket);
 await client.send(new HeadBucketCommand({ Bucket: bucket }));
 console.log("head_ok");
 
-const key = `recordings/livekit-probe-${Date.now()}.mp4`;
+const key = `recordings/obs-probe-${Date.now()}.mp4`;
 const created = await client.send(
   new CreateMultipartUploadCommand({
     Bucket: bucket,

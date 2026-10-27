@@ -1,21 +1,15 @@
 "use client";
 
-import { useParticipants } from "@livekit/components-react";
 import { Eye } from "lucide-react";
+import { useRoomPresence } from "@/hooks/use-room-presence";
 
 interface ViewerCountProps {
+  roomKey: string;
   hostIdentity: string;
 }
 
-export function ViewerCount({ hostIdentity }: ViewerCountProps) {
-  const participants = useParticipants();
-  // Restamos 1 para no contar al host
-  const viewers = Math.max(
-    0,
-    participants.filter(
-      (p) => p.identity !== `host-${hostIdentity}` && p.identity !== hostIdentity
-    ).length
-  );
+export function ViewerCount({ roomKey, hostIdentity }: ViewerCountProps) {
+  const viewers = useRoomPresence(roomKey, hostIdentity).length;
 
   return (
     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm border border-white/10 rounded-full px-3 py-1.5">

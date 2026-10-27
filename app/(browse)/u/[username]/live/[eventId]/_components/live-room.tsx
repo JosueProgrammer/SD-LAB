@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LiveKitRoom } from "@livekit/components-react";
 import { Video } from "@/components/stream-player/Video";
 import { Chat } from "@/components/stream-player/chat";
 import { format } from "date-fns";
@@ -33,35 +32,49 @@ interface LiveRoomProps {
     endTime: Date;
     location: string;
     isLive: boolean;
+    playbackUrl: string | null;
+    obsConnected: boolean;
   };
   hostId: string;
   hostUsername: string;
   username: string;
+  viewerName: string;
   canManage?: boolean;
 }
 
-export function LiveRoom({ event, hostId, hostUsername, username, canManage = true }: LiveRoomProps) {
-  const [token, setToken] = useState<string | null>(null);
+export function LiveRoom({
+  event,
+  hostId,
+  hostUsername,
+  username,
+  viewerName,
+  canManage = true,
+}: LiveRoomProps) {
+  const [identity, setIdentity] = useState<string | null>(null);
+  const roomKey = `event:${event.id}`;
 
   useEffect(() => {
-    createViewerToken(hostId).then(setToken).catch(console.error);
+    createViewerToken(hostId)
+      .then((token) => setIdentity(token.identity))
+      .catch(console.error);
   }, [hostId]);
 
   const handleBlock = async (participantIdentity: string) => {
     await onBlock(participantIdentity);
   };
 
-  if (!token) {
+  if (!identity) {
     return (
       <div className="flex items-center justify-center h-[60vh] text-muted-foreground animate-pulse">
-        Conectando con LiveKit...
+        Preparando sala…
       </div>
     );
   }
 
+  const isLive = event.isLive || event.obsConnected;
+
   return (
     <div className="flex flex-col h-full gap-0">
-      {/* Top info bar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-background/80 backdrop-blur-md z-10">
         <div className="flex items-center gap-6 flex-wrap">
           <div>
@@ -89,7 +102,6 @@ export function LiveRoom({ event, hostId, hostUsername, username, canManage = tr
         </div>
 
         <div className="flex items-center gap-3">
-          {/* LIVE badge */}
           <div className="flex items-center gap-1.5 bg-red-600/10 border border-red-600/30 rounded-full px-3 py-1">
             <Radio className="w-3.5 h-3.5 text-red-500 animate-pulse" />
             <span className="text-xs font-bold text-red-500 tracking-widest">EN VIVO</span>
@@ -98,43 +110,44 @@ export function LiveRoom({ event, hostId, hostUsername, username, canManage = tr
         </div>
       </div>
 
-      {/* Main layout */}
-      <LiveKitRoom
-        token={token}
-        serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL!}
-        className="flex-1 grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 overflow-hidden"
-      >
-        {/* Video + viewer count */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 overflow-hidden">
         <div className="lg:col-span-3 xl:col-span-4 flex flex-col overflow-hidden">
           <div className="relative flex-1">
-            <Video hostName={hostUsername} hostIdentity={hostId} />
+            <Video
+              hostName={hostUsername}
+              playbackUrl={event.playbackUrl}
+              isLive={isLive}
+            />
             <div className="absolute bottom-4 left-4 z-10">
-              <ViewerCount hostIdentity={hostId} />
+              <ViewerCount roomKey={roomKey} hostIdentity={hostId} />
             </div>
           </div>
         </div>
 
-        {/* Right sidebar: participants + chat */}
         <div className="lg:col-span-1 xl:col-span-1 flex flex-col border-l border-border bg-background overflow-hidden">
-          {/* Participants */}
           <div className="h-[45%] border-b border-border overflow-hidden">
-            <ParticipantList hostIdentity={hostId} onBlock={canManage ? handleBlock : undefined} />
+            <ParticipantList
+              roomKey={roomKey}
+              hostIdentity={hostId}
+              onBlock={canManage ? handleBlock : undefined}
+            />
           </div>
 
-          {/* Chat */}
           <div className="flex-1 overflow-hidden">
             <Chat
-              viewerName={hostUsername}
+              roomKey={roomKey}
+              viewerName={viewerName}
               hostName={hostUsername}
               hostIdentity={hostId}
               isFollowing={true}
               isChatEnabled={true}
               isChatDelayed={false}
               isChatFollowersOnly={false}
+              isLive={isLive}
             />
           </div>
         </div>
-      </LiveKitRoom>
+      </div>
     </div>
   );
 }

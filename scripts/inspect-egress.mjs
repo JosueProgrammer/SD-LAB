@@ -1,9 +1,9 @@
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync, statSync } from "fs";
+import path from "path";
 import { PrismaClient } from "@prisma/client";
-import { EgressClient } from "livekit-server-sdk";
 
-function loadEnv(path = ".env") {
-  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+function loadEnv(file = ".env") {
+  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
     if (!line || line.trim().startsWith("#")) continue;
     const i = line.indexOf("=");
     if (i < 0) continue;
@@ -21,39 +21,41 @@ function loadEnv(path = ".env") {
 
 loadEnv();
 const db = new PrismaClient();
-const host = (process.env.LIVEKIT_API_URL || "")
-  .replace(/^wss:/i, "https:")
-  .replace(/^ws:/i, "http:");
-const egress = new EgressClient(host, process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
+const recordingsRoot = process.env.MEDIAMTX_RECORDINGS_DIR || "./recordings";
 
 const rows = await db.event.findMany({
   where: { egressId: { not: null }, recordingUrl: null },
   orderBy: { updatedAt: "desc" },
   take: 5,
-  select: { id: true, title: true, egressId: true, status: true },
+  select: { id: true, title: true, egressId: true, streamPath: true, status: true },
 });
 
-for (const row of rows) {
+function listMp4(dir, acc = []) {
   try {
-    const listed = await egress.listEgress({ egressId: row.egressId });
-    const info = listed[0];
-    console.log({
-      title: row.title,
-      status: row.status,
-      egressStatus: info?.status,
-      error: info?.error || null,
-      fileResults: (info?.fileResults || []).map((f) => ({
-        filename: f.filename,
-        location: f.location,
-        size: f.size?.toString?.() || f.size,
-      })),
-    });
-  } catch (error) {
-    console.log({
-      title: row.title,
-      inspectError: error instanceof Error ? error.message : String(error),
-    });
+    for (const name of readdirSync(dir)) {
+      const full = path.join(dir, name);
+      const st = statSync(full);
+      if (st.isDirectory()) listMp4(full, acc);
+      else if (/\.(mp4|m4v|mkv)$/i.test(name)) acc.push({ full, mtime: st.mtimeMs, size: st.size });
+    }
+  } catch {
+    /* ignore */
   }
+  return acc;
+}
+
+for (const row of rows) {
+  const streamPath = row.streamPath || (row.egressId?.startsWith("mtx:") ? row.egressId.slice(4) : null);
+  const files = streamPath ? listMp4(path.join(recordingsRoot, streamPath)) : [];
+  files.sort((a, b) => b.mtime - a.mtime);
+  console.log({
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    egressId: row.egressId,
+    streamPath,
+    latestFile: files[0] || null,
+  });
 }
 
 await db.$disconnect();

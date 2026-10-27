@@ -1,23 +1,19 @@
 "use client";
 
-import { useParticipants } from "@livekit/components-react";
 import { UserRound, ShieldBan } from "lucide-react";
 import { toast } from "sonner";
 import { useTransition } from "react";
+import { useRoomPresence } from "@/hooks/use-room-presence";
 
 interface ParticipantListProps {
+  roomKey: string;
   hostIdentity: string;
   onBlock?: (participantIdentity: string) => Promise<void>;
 }
 
-export function ParticipantList({ hostIdentity, onBlock }: ParticipantListProps) {
-  const participants = useParticipants();
+export function ParticipantList({ roomKey, hostIdentity, onBlock }: ParticipantListProps) {
+  const viewers = useRoomPresence(roomKey, hostIdentity);
   const [isPending, startTransition] = useTransition();
-
-  // Excluir al host de la lista de espectadores
-  const viewers = participants.filter(
-    (p) => p.identity !== `host-${hostIdentity}` && p.identity !== hostIdentity
-  );
 
   return (
     <div className="flex flex-col h-full">
@@ -39,16 +35,14 @@ export function ParticipantList({ hostIdentity, onBlock }: ParticipantListProps)
         )}
         {viewers.map((viewer) => (
           <div
-            key={viewer.identity}
+            key={viewer.userId}
             className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/40 group transition-colors"
           >
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
                 <UserRound className="w-4 h-4 text-muted-foreground" />
               </div>
-              <span className="text-sm font-medium truncate">
-                {viewer.name ?? viewer.identity}
-              </span>
+              <span className="text-sm font-medium truncate">{viewer.username}</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             </div>
 
@@ -59,8 +53,8 @@ export function ParticipantList({ hostIdentity, onBlock }: ParticipantListProps)
                 onClick={() => {
                   startTransition(async () => {
                     try {
-                      await onBlock(viewer.identity);
-                      toast.success(`${viewer.name ?? viewer.identity} ha sido bloqueado`);
+                      await onBlock(viewer.userId);
+                      toast.success(`${viewer.username} ha sido bloqueado`);
                     } catch {
                       toast.error("No se pudo bloquear al usuario");
                     }

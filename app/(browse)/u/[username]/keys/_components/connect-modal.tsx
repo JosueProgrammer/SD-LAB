@@ -11,76 +11,50 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { IngressInput } from "livekit-server-sdk";
 import { useState, useTransition, useRef, ElementRef } from "react";
 import { createIntegress } from "@/actions/ingress";
 import { toast } from "sonner";
 
-const RTMP = String(IngressInput.RTMP_INPUT);
-const WHIP = String(IngressInput.WHIP_INPUT);
-
-type IngresType = typeof RTMP | typeof WHIP;
-
 export function ConnectModal() {
-    
-    const closeRef = useRef<ElementRef<"button">>(null)
-  const [ingressType, setIngressTyoe] = useState<IngresType>(RTMP);
+  const closeRef = useRef<ElementRef<"button">>(null);
   const [isPending, startTransition] = useTransition();
 
   const onSubmit = () => {
     startTransition(() => {
-      createIntegress(parseInt(ingressType))
+      createIntegress()
         .then(() => {
-            toast("Ingress Created")
-            closeRef?.current?.click()
+          toast.success("Credenciales OBS (RTMP) generadas");
+          closeRef?.current?.click();
         })
-        .catch(() => toast.error("Something went wrong"));
+        .catch(() => toast.error("No se pudieron generar las credenciales"));
     });
   };
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="primary">Generate connection</Button>
+        <Button variant="primary">Generar conexión OBS</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Generate connection</DialogTitle>
+          <DialogTitle>Generar conexión OBS (RTMP)</DialogTitle>
         </DialogHeader>
-        <Select
-          disabled={isPending}
-          value={ingressType}
-          onValueChange={(value) => setIngressTyoe(value)}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Ingress Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={RTMP}>RTMP</SelectItem>
-            <SelectItem value={WHIP}>WHIP</SelectItem>
-          </SelectContent>
-        </Select>
+        <p className="text-sm text-muted-foreground">
+          Se creará una URL RTMP y una clave para configurar OBS Studio (Servicio → Personalizado).
+        </p>
         <Alert>
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Warning !</AlertTitle>
+          <AlertTitle>Aviso</AlertTitle>
           <AlertDescription>
-            This action will reset all active streams using the current
-            connection
+            Esta acción reemplaza la clave activa anterior de tu canal.
           </AlertDescription>
         </Alert>
         <div className="flex justify-between">
           <DialogClose ref={closeRef} asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button variant="ghost">Cancelar</Button>
           </DialogClose>
           <Button disabled={isPending} onClick={onSubmit} variant="primary">
-            Generate
+            Generar
           </Button>
         </div>
       </DialogContent>

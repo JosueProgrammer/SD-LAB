@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { LiveKitRoom } from "@livekit/components-react";
 import { Cast, Copy, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createViewerToken } from "@/actions/token";
 import { createEventObsIngress, syncEventObsStatus, type ObsLink } from "@/actions/obs";
 import { Video } from "@/components/stream-player/Video";
 import { Button } from "@/components/ui/button";
@@ -18,9 +16,9 @@ import {
 
 interface ObsTransmitButtonProps {
   eventId: string;
-  hostId: string;
   serverUrl: string | null;
   streamKey: string | null;
+  playbackUrl: string | null;
   obsConnected: boolean;
 }
 
@@ -32,9 +30,9 @@ const labels = {
 
 export function ObsTransmitButton({
   eventId,
-  hostId,
   serverUrl,
   streamKey,
+  playbackUrl,
   obsConnected,
 }: ObsTransmitButtonProps) {
   const [open, setOpen] = useState(false);
@@ -42,10 +40,10 @@ export function ObsTransmitButton({
   const [link, setLink] = useState<ObsLink>({
     serverUrl,
     streamKey,
+    playbackUrl,
     status: obsConnected ? "CONNECTED" : "DISCONNECTED",
     connected: obsConnected,
   });
-  const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState<"url" | "key" | null>(null);
 
   const hasKey = Boolean(link.streamKey);
@@ -62,10 +60,11 @@ export function ObsTransmitButton({
             ...next,
             serverUrl: next.serverUrl ?? current.serverUrl,
             streamKey: next.streamKey ?? current.streamKey,
+            playbackUrl: next.playbackUrl ?? current.playbackUrl,
           }));
         }
       } catch {
-        // La consulta se reintenta en el siguiente intervalo.
+        // reintento
       }
     };
 
@@ -76,21 +75,6 @@ export function ObsTransmitButton({
       window.clearInterval(timer);
     };
   }, [open, hasKey, eventId]);
-
-  useEffect(() => {
-    if (!open || !link.connected) return;
-    let cancelled = false;
-    createViewerToken(hostId)
-      .then((value) => {
-        if (!cancelled) setToken(value);
-      })
-      .catch(() => {
-        if (!cancelled) setToken(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, link.connected, hostId]);
 
   const generate = () => {
     startTransition(async () => {
@@ -120,7 +104,9 @@ export function ObsTransmitButton({
               : "bg-muted text-muted-foreground"
           }`}
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${link.connected ? "bg-emerald-400" : "bg-muted-foreground"}`} />
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${link.connected ? "bg-emerald-400" : "bg-muted-foreground"}`}
+          />
           {labels[link.status]}
         </span>
       </div>
@@ -138,7 +124,8 @@ export function ObsTransmitButton({
           <DialogHeader>
             <DialogTitle>Transmitir con OBS</DialogTitle>
             <DialogDescription>
-              Usa esta URL RTMP y la clave de este evento en OBS. Al iniciar la transmisión el estado pasa a OBS Conectado y verás la vista previa. Al detener OBS vuelve a Desconectado.
+              En OBS: Servicio → Personalizado. Pega la URL RTMP y la clave. Al iniciar la
+              transmisión el estado pasa a OBS Conectado y verás la vista previa HLS.
             </DialogDescription>
           </DialogHeader>
 
@@ -149,8 +136,19 @@ export function ObsTransmitButton({
 
             {link.serverUrl && link.streamKey ? (
               <div className="space-y-3">
-                <Credential label="URL RTMP" value={link.serverUrl} copied={copied === "url"} onCopy={() => copy(link.serverUrl!, "url")} />
-                <Credential label="Clave del evento" value={link.streamKey} secret copied={copied === "key"} onCopy={() => copy(link.streamKey!, "key")} />
+                <Credential
+                  label="URL RTMP (servidor)"
+                  value={link.serverUrl}
+                  copied={copied === "url"}
+                  onCopy={() => copy(link.serverUrl!, "url")}
+                />
+                <Credential
+                  label="Clave de transmisión"
+                  value={link.streamKey}
+                  secret
+                  copied={copied === "key"}
+                  onCopy={() => copy(link.streamKey!, "key")}
+                />
                 <Button type="button" variant="outline" onClick={generate} disabled={pending}>
                   Generar otra clave
                 </Button>
@@ -163,10 +161,8 @@ export function ObsTransmitButton({
             )}
 
             <div className="overflow-hidden rounded-xl border bg-black">
-              {link.connected && token ? (
-                <LiveKitRoom token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL!} connect>
-                  <Video hostName="Transmisión" hostIdentity={hostId} />
-                </LiveKitRoom>
+              {link.connected && link.playbackUrl ? (
+                <Video hostName="Transmisión" playbackUrl={link.playbackUrl} isLive />
               ) : (
                 <div className="flex aspect-video items-center justify-center px-6 text-center text-sm text-muted-foreground">
                   {link.status === "BUFFERING"
@@ -201,7 +197,11 @@ function Credential({
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         {secret && (
-          <button type="button" className="text-xs text-violet-300" onClick={() => setVisible((current) => !current)}>
+          <button
+            type="button"
+            className="text-xs text-violet-300"
+            onClick={() => setVisible((current) => !current)}
+          >
             {visible ? "Ocultar" : "Mostrar"}
           </button>
         )}

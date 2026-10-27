@@ -1,52 +1,40 @@
-"use server"
+"use server";
 
-import { v4} from "uuid"
-import { AccessToken } from "livekit-server-sdk"
+import { v4 } from "uuid";
+import { getSelf } from "@/lib/auth-service";
+import { getUserById } from "@/lib/user-service";
+import { isBlockedByUser } from "@/lib/block-service";
 
-import { getSelf } from "@/lib/auth-service"
-import { getUserById } from "@/lib/user-service"
-import { isBlockedByUser } from "@/lib/block-service"
+export type ViewerIdentity = {
+  identity: string;
+  name: string;
+  isHost: boolean;
+};
 
-export async function createViewerToken (hostIdentity: string) {
-    let self
+/** Identidad de viewer para salas OBS/HLS. */
+export async function createViewerToken(hostIdentity: string): Promise<ViewerIdentity> {
+  let self: { id: string; username: string };
 
-    try {
-        self = await getSelf()        
-    } catch {
-        const id = v4()
-        const username = `gest#${Math.floor(Math.random() * 1000)}`
-        self = {id, username}
-    }
+  try {
+    self = await getSelf();
+  } catch {
+    self = {
+      id: v4(),
+      username: `gest#${Math.floor(Math.random() * 1000)}`,
+    };
+  }
 
-    const host = await getUserById(hostIdentity)
+  const host = await getUserById(hostIdentity);
+  if (!host) throw new Error("User not found");
 
-    if(!host) {
-        throw new Error("User not found")
-    }
+  const isBlocked = await isBlockedByUser(host.id);
+  if (isBlocked) throw new Error("User is blocked");
 
-    const isBlocked = await isBlockedByUser(host.id)
+  const isHost = self.id === host.id;
 
-    if(isBlocked) {
-        throw new Error("User is blocked")
-    }
-
-    const isHost = self.id === host.id
-
-    const token = new AccessToken(
-        process.env.LIVEKIT_API_KEY!,
-        process.env.LIVEKIT_API_SECRET!,
-        {
-            identity: isHost ? `host-${self.id}` : self.id,
-            name: self.username
-        }
-    )
-
-    token.addGrant({
-        room: host.id,
-        roomJoin: true,
-        canPublish: false,
-        canPublishData: true
-    })
-    
-    return await Promise.resolve(token.toJwt())
+  return {
+    identity: isHost ? `host-${self.id}` : self.id,
+    name: self.username,
+    isHost,
+  };
 }

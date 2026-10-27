@@ -35,13 +35,14 @@ interface EventPreviewCardProps {
     participants: number;
     serverUrl: string | null;
     streamKey: string | null;
+    playbackUrl: string | null;
     obsConnected: boolean;
   };
   username: string;
   hostId: string;
 }
 
-export function EventPreviewCard({ event, username, hostId }: EventPreviewCardProps) {
+export function EventPreviewCard({ event, username }: EventPreviewCardProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -156,9 +157,9 @@ export function EventPreviewCard({ event, username, hostId }: EventPreviewCardPr
         </button>
         <ObsTransmitButton
           eventId={event.id}
-          hostId={hostId}
           serverUrl={event.serverUrl}
           streamKey={event.streamKey}
+          playbackUrl={event.playbackUrl}
           obsConnected={event.obsConnected}
         />
       </div>

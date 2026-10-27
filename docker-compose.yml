@@ -1,10 +1,24 @@
 services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.11.3
+    container_name: next-streaming-ghost-mediamtx
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+      - ./recordings:/recordings
+    ports:
+      - "1935:1935"
+      - "8888:8888"
+      - "9997:9997"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   web:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_LIVEKIT_WS_URL: ${NEXT_PUBLIC_LIVEKIT_WS_URL:-}
+        NEXT_PUBLIC_HLS_BASE_URL: ${NEXT_PUBLIC_HLS_BASE_URL:-}
         NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:-}
         NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-}
         NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-}
@@ -20,6 +34,12 @@ services:
       NODE_ENV: production
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
+      MEDIAMTX_API_URL: http://mediamtx:9997
+      MEDIAMTX_RECORDINGS_DIR: /recordings
+    volumes:
+      - ./recordings:/recordings:ro
     ports:
       - "3000:3000"
+    depends_on:
+      - mediamtx
     restart: unless-stopped
