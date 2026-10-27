@@ -160,9 +160,24 @@ export function ObsTransmitButton({
               </Button>
             )}
 
-            <div className="overflow-hidden rounded-xl border bg-black">
+            <div className="overflow-hidden rounded-xl border bg-black aspect-video">
               {link.connected && link.playbackUrl ? (
-                <Video hostName="Transmisión" playbackUrl={link.playbackUrl} isLive />
+                <Video
+                  hostName="Transmisión"
+                  playbackUrl={
+                    link.playbackUrl.startsWith("/api/hls/")
+                      ? link.playbackUrl
+                      : (() => {
+                          try {
+                            return `/api/hls${new URL(link.playbackUrl).pathname}`;
+                          } catch {
+                            return link.playbackUrl;
+                          }
+                        })()
+                  }
+                  isLive
+                  fill
+                />
               ) : (
                 <div className="flex aspect-video items-center justify-center px-6 text-center text-sm text-muted-foreground">
                   {link.status === "BUFFERING"

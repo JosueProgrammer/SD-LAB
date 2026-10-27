@@ -8,9 +8,10 @@ interface VideoProps {
   hostName: string;
   playbackUrl: string | null | undefined;
   isLive?: boolean;
+  fill?: boolean;
 }
 
-export function Video({ hostName, playbackUrl, isLive = false }: VideoProps) {
+export function Video({ hostName, playbackUrl, isLive = false, fill = false }: VideoProps) {
   const content =
     isLive && playbackUrl ? (
       <LiveVideo playbackUrl={playbackUrl} />
@@ -18,7 +19,17 @@ export function Video({ hostName, playbackUrl, isLive = false }: VideoProps) {
       <OffLineVideo username={hostName} />
     );
 
-  return <div className="aspect-video border-b group relative">{content}</div>;
+  return (
+    <div
+      className={
+        fill
+          ? "relative h-full w-full min-h-[240px] bg-black group"
+          : "aspect-video border-b group relative bg-black"
+      }
+    >
+      {content}
+    </div>
+  );
 }
 
 export function VideoSkeleton() {

@@ -33,6 +33,7 @@ interface LiveRoomProps {
     location: string;
     isLive: boolean;
     playbackUrl: string | null;
+    streamPath: string | null;
     obsConnected: boolean;
   };
   hostId: string;
@@ -72,6 +73,9 @@ export function LiveRoom({
   }
 
   const isLive = event.isLive || event.obsConnected;
+  const playbackUrl = event.streamPath
+    ? `/api/hls/${event.streamPath}/index.m3u8`
+    : event.playbackUrl;
 
   return (
     <div className="flex flex-col h-full gap-0">
@@ -112,13 +116,14 @@ export function LiveRoom({
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 overflow-hidden">
         <div className="lg:col-span-3 xl:col-span-4 flex flex-col overflow-hidden">
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-h-[50vh] bg-black">
             <Video
               hostName={hostUsername}
-              playbackUrl={event.playbackUrl}
+              playbackUrl={playbackUrl}
               isLive={isLive}
+              fill
             />
-            <div className="absolute bottom-4 left-4 z-10">
+            <div className="absolute bottom-4 left-4 z-30">
               <ViewerCount roomKey={roomKey} hostIdentity={hostId} />
             </div>
           </div>

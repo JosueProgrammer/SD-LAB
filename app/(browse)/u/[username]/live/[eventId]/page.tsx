@@ -57,6 +57,7 @@ export default async function LiveEventPage({ params }: LiveEventPageProps) {
           location: event.location,
           isLive: event.isLive,
           playbackUrl: event.playbackUrl,
+          streamPath: event.streamPath,
           obsConnected: event.obsConnected,
         }}
         hostId={event.creator.id}

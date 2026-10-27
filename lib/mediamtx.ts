@@ -20,13 +20,18 @@ export function recordingsDir() {
   return process.env.MEDIAMTX_RECORDINGS_DIR || "./recordings";
 }
 
+/** URL HLS vía proxy same-origin (evita negro por CORS / Private Network Access). */
+export function playbackUrlForPath(streamPath: string) {
+  return `/api/hls/${streamPath}/index.m3u8`;
+}
+
 export function createStreamCredentials(prefix: "evt" | "usr") {
   const streamPath = `${prefix}_${randomBytes(12).toString("hex")}`;
   return {
     streamPath,
     streamKey: streamPath,
     serverUrl: rtmpPublicUrl(),
-    playbackUrl: `${hlsPublicUrl()}/${streamPath}/index.m3u8`,
+    playbackUrl: playbackUrlForPath(streamPath),
   };
 }
 

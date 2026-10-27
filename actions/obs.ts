@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { getSelf } from "@/lib/auth-service";
 import { db } from "@/lib/db";
-import { createStreamCredentials, isPathPublishing } from "@/lib/mediamtx";
+import {
+  createStreamCredentials,
+  isPathPublishing,
+  playbackUrlForPath,
+} from "@/lib/mediamtx";
 import { isObsStreaming } from "@/lib/obs-websocket";
 import { allowRecordingRetry, startEventRecording } from "@/lib/recording";
 
@@ -102,10 +106,21 @@ export async function syncEventObsStatus(eventId: string): Promise<ObsLink> {
   }
   if (!connected) await allowRecordingRetry(eventId);
 
+  const playbackUrl = event.streamPath
+    ? playbackUrlForPath(event.streamPath)
+    : event.playbackUrl;
+
+  if (playbackUrl && playbackUrl !== event.playbackUrl) {
+    await db.event.update({
+      where: { id: eventId },
+      data: { playbackUrl },
+    });
+  }
+
   return {
     serverUrl: event.serverUrl,
     streamKey: event.streamKey,
-    playbackUrl: event.playbackUrl,
+    playbackUrl,
     status,
     connected,
   };
