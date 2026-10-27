@@ -13,35 +13,72 @@ interface LiveVideoProps {
 export function LiveVideo({ playbackUrl }: LiveVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [volume, setVolume] = useState(50);
+  // Empieza en mute: Chrome bloquea autoplay con audio y deja el video negro.
+  const [volume, setVolume] = useState(0);
+  const [needsGesture, setNeedsGesture] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !playbackUrl) return;
 
-    let hls: Hls | null = null;
+    setError(null);
+    setNeedsGesture(false);
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+
+    video.muted = true;
+    video.playsInline = true;
+
+    const tryPlay = async () => {
+      try {
+        await video.play();
+        setNeedsGesture(false);
+      } catch {
+        setNeedsGesture(true);
+      }
+    };
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = playbackUrl;
-      void video.play().catch(() => undefined);
+      void tryPlay();
     } else if (Hls.isSupported()) {
-      hls = new Hls({
+      const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
         liveDurationInfinity: true,
+        backBufferLength: 30,
       });
+      hlsRef.current = hls;
       hls.loadSource(playbackUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        void video.play().catch(() => undefined);
+        void tryPlay();
+      });
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          hls.startLoad();
+          return;
+        }
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          hls.recoverMediaError();
+          return;
+        }
+        setError("No se pudo reproducir el HLS. Revisa MediaMTX en :8888.");
+        hls.destroy();
       });
     } else {
-      video.src = playbackUrl;
+      setError("Este navegador no soporta HLS.");
     }
 
     return () => {
-      hls?.destroy();
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+      video.removeAttribute("src");
+      video.load();
     };
   }, [playbackUrl]);
 
@@ -49,13 +86,14 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
     setVolume(+value);
     if (videoRef.current) {
       videoRef.current.muted = value === 0;
-      videoRef.current.volume = +value * 0.01;
+      videoRef.current.volume = Math.max(+value * 0.01, 0);
     }
   };
 
   const toggleMute = () => {
     const isMuted = volume === 0;
-    setVolume(isMuted ? 50 : 0);
+    const next = isMuted ? 50 : 0;
+    setVolume(next);
     if (videoRef.current) {
       videoRef.current.muted = !isMuted;
       videoRef.current.volume = isMuted ? 0.5 : 0;
@@ -74,6 +112,18 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
     setIsFullscreen(document.fullscreenElement !== null);
   };
 
+  const resumePlayback = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = volume === 0;
+    try {
+      await video.play();
+      setNeedsGesture(false);
+    } catch {
+      setNeedsGesture(true);
+    }
+  };
+
   useEventListener(
     "fullscreenchange",
     handleFullscreenChange,
@@ -81,10 +131,25 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
   );
 
   return (
-    <div ref={wrapperRef} className="relative h-full flex bg-black">
-      <video ref={videoRef} className="w-full h-full object-contain" playsInline autoPlay muted={volume === 0} />
-      <div className="absolute top-0 h-full w-full opacity-0 hover:opacity-100 hover:transition-all">
-        <div className="absolute bottom-0 flex h-14 w-full items-center justify-between bg-gradient-to-r from-neutral-900 px-4">
+    <div ref={wrapperRef} className="relative aspect-video w-full bg-black">
+      <video
+        ref={videoRef}
+        className="absolute inset-0 h-full w-full object-contain"
+        playsInline
+        autoPlay
+        muted
+      />
+      {(needsGesture || error) && (
+        <button
+          type="button"
+          onClick={() => void resumePlayback()}
+          className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 text-sm font-medium text-white"
+        >
+          {error ?? "Clic para ver la transmisión"}
+        </button>
+      )}
+      <div className="absolute top-0 h-full w-full opacity-0 hover:opacity-100 hover:transition-all pointer-events-none">
+        <div className="absolute bottom-0 flex h-14 w-full items-center justify-between bg-gradient-to-r from-neutral-900 px-4 pointer-events-auto">
           <VolumeControl onChange={onVolumeChange} value={volume} onToggle={toggleMute} />
           <FullScreenControl isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
         </div>

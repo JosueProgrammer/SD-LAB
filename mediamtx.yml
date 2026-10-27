@@ -11,12 +11,13 @@ rtmpAddress: :1935
 hls: yes
 hlsAddress: :8888
 hlsAlwaysRemux: yes
-hlsVariant: lowLatency
+# fmp4 es más compatible con hls.js en Chrome que lowLatency
+hlsVariant: fmp4
 hlsSegmentCount: 7
 hlsSegmentDuration: 1s
-hlsPartDuration: 200ms
 hlsSegmentMaxSize: 50M
 hlsAllowOrigin: "*"
+
 
 webrtc: no
 srt: no
