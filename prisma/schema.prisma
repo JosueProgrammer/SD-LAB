@@ -232,6 +232,7 @@ model StreamPresence {
   roomKey    String
   userId     String
   username   String
+  latencySec Float?
   lastSeenAt DateTime @default(now())
 
   @@unique([roomKey, userId])

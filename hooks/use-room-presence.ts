@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { heartbeatPresence, leavePresence, listPresence, type PresenceDto } from "@/actions/presence";
+import { useStreamMetricsStore } from "@/store/use-stream-metrics";
 
 export function useRoomPresence(roomKey: string, excludeUserId?: string) {
   const [viewers, setViewers] = useState<PresenceDto[]>([]);
@@ -12,7 +13,10 @@ export function useRoomPresence(roomKey: string, excludeUserId?: string) {
 
     const tick = async () => {
       try {
-        await heartbeatPresence(roomKey);
+        const latencySec = useStreamMetricsStore.getState().latencySec;
+        await heartbeatPresence(roomKey, {
+          latencySec: latencySec ?? undefined,
+        });
         const next = await listPresence(roomKey, excludeUserId);
         if (!cancelled) setViewers(next);
       } catch {

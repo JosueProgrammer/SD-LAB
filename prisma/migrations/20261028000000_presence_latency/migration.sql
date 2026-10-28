@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "StreamPresence" ADD COLUMN IF NOT EXISTS "latencySec" DOUBLE PRECISION;

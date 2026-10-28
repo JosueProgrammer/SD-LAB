@@ -40,6 +40,9 @@ export type PathListItem = {
   ready: boolean;
   readyTime?: string;
   tracks?: string[];
+  bytesReceived?: number;
+  bytesSent?: number;
+  readers?: unknown[];
 };
 
 export async function listPaths(): Promise<PathListItem[]> {
@@ -75,4 +78,19 @@ export async function isPathPublishing(pathName: string): Promise<boolean> {
   if (path) return Boolean(path.ready);
   const items = await listPaths();
   return items.some((item) => item.name === pathName && item.ready);
+}
+
+/** Intenta extraer altura (p. ej. 720) de tracks MediaMTX. */
+export function parseResolutionHeight(tracks?: string[]): number | null {
+  if (!tracks?.length) return null;
+  const joined = tracks.join(" ");
+  const match = joined.match(/(\d{3,4})\s*[xX×]\s*(\d{3,4})/);
+  if (match) return Math.min(Number(match[1]), Number(match[2]));
+  if (/2160|4k/i.test(joined)) return 2160;
+  if (/1440/i.test(joined)) return 1440;
+  if (/1080/i.test(joined)) return 1080;
+  if (/720/i.test(joined)) return 720;
+  if (/480/i.test(joined)) return 480;
+  if (/360/i.test(joined)) return 360;
+  return null;
 }

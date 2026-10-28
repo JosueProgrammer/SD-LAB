@@ -3,6 +3,7 @@ import { getSelf, requireRole } from "@/lib/auth-service";
 import { getAdminDashboardStats } from "@/lib/event-service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Activity, GraduationCap, UserRound, CalendarDays } from "lucide-react";
+import { AdminLiveMonitor } from "./_components/admin-live-monitor";
 
 export default async function DashboardPage() {
   const self = await getSelf();
@@ -20,27 +21,7 @@ export default async function DashboardPage() {
       { label: "Invitados registrados", value: stats.invitados, icon: Users },
       { label: "Eventos creados", value: stats.events, icon: CalendarDays },
     ];
-    return (
-      <div className="mx-auto max-w-6xl space-y-8 p-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard administrativo</h1>
-          <p className="text-muted-foreground">Comportamiento general de la plataforma.</p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {items.map((item) => (
-            <Card key={item.label}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{item.label}</CardTitle>
-                <item.icon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{item.value}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
+    return <AdminLiveMonitor initialStats={items} />;
   }
 
   const { newUsersCount, connectedUsersCount } = await getDashboardStats();

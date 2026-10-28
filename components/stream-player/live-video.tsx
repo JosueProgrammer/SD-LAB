@@ -5,6 +5,7 @@ import Hls from "hls.js";
 import { useEventListener } from "usehooks-ts";
 import { FullScreenControl } from "./fullscreen-control";
 import { VolumeControl } from "./volume-control";
+import { useStreamMetricsStore } from "@/store/use-stream-metrics";
 
 interface LiveVideoProps {
   playbackUrl: string;
@@ -14,6 +15,7 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const setLatencySec = useStreamMetricsStore((s) => s.setLatencySec);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [volume, setVolume] = useState(0);
   const [needsGesture, setNeedsGesture] = useState(false);
@@ -25,9 +27,11 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
     if (!video || !playbackUrl) return;
 
     let cancelled = false;
+    let latencyTimer: number | undefined;
     setError(null);
     setNeedsGesture(false);
     setLoading(true);
+    setLatencySec(null);
     hlsRef.current?.destroy();
     hlsRef.current = null;
 
@@ -122,6 +126,21 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
         setError("No se pudo reproducir el video. ¿OBS sigue transmitiendo?");
         hls.destroy();
       });
+
+      latencyTimer = window.setInterval(() => {
+        if (cancelled) return;
+        let latency: number | null = null;
+        if (typeof hls.latency === "number" && Number.isFinite(hls.latency)) {
+          latency = hls.latency;
+        } else if (
+          typeof hls.liveSyncPosition === "number" &&
+          Number.isFinite(hls.liveSyncPosition) &&
+          Number.isFinite(video.currentTime)
+        ) {
+          latency = Math.max(0, hls.liveSyncPosition - video.currentTime);
+        }
+        setLatencySec(latency);
+      }, 2000);
     } else {
       setLoading(false);
       setError("Este navegador no soporta HLS.");
@@ -129,6 +148,8 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
 
     return () => {
       cancelled = true;
+      if (latencyTimer) window.clearInterval(latencyTimer);
+      setLatencySec(null);
       video.removeEventListener("loadeddata", showFrame);
       video.removeEventListener("resize", showFrame);
       hlsRef.current?.destroy();
@@ -136,7 +157,7 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
       video.removeAttribute("src");
       video.load();
     };
-  }, [playbackUrl]);
+  }, [playbackUrl, setLatencySec]);
 
   const onVolumeChange = (value: number) => {
     setVolume(+value);
