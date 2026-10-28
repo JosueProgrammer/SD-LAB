@@ -44,7 +44,7 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
         await video.play();
         if (!cancelled) {
           setNeedsGesture(false);
-          setLoading(false);
+          if (video.videoWidth > 0) setLoading(false);
         }
       } catch {
         if (!cancelled) {
@@ -54,6 +54,14 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
       }
     };
 
+    const showFrame = () => {
+      if (cancelled || video.videoWidth <= 0) return;
+      setLoading(false);
+      setError(null);
+    };
+    video.addEventListener("loadeddata", showFrame);
+    video.addEventListener("resize", showFrame);
+
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = playbackUrl;
       video.addEventListener("loadedmetadata", () => void tryPlay(), { once: true });
@@ -62,18 +70,42 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
-        liveDurationInfinity: true,
-        backBufferLength: 30,
-        maxBufferLength: 20,
+        backBufferLength: 60,
+        maxBufferLength: 40,
+        liveSyncDurationCount: 2,
+        liveMaxLatencyDurationCount: 6,
+        maxLiveSyncPlaybackRate: 1.5,
+        startPosition: -1,
       });
       hlsRef.current = hls;
+
+      const seekIntoBuffer = () => {
+        const edge = hls.liveSyncPosition;
+        if (edge == null || !Number.isFinite(edge)) return;
+        const buffered = video.buffered;
+        for (let i = 0; i < buffered.length; i++) {
+          if (video.currentTime >= buffered.start(i) && video.currentTime < buffered.end(i) - 0.25) {
+            return;
+          }
+        }
+        try {
+          video.currentTime = edge;
+        } catch {
+          // el video todavía no acepta seek
+        }
+      };
+
       hls.loadSource(playbackUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        seekIntoBuffer();
         void tryPlay();
       });
-      hls.on(Hls.Events.FRAG_LOADED, () => {
-        if (!cancelled) setLoading(false);
+      hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
+        if (cancelled || data.frag.type === "audio") return;
+        seekIntoBuffer();
+        void tryPlay();
+        showFrame();
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!data.fatal || cancelled) return;
@@ -83,6 +115,7 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           hls.recoverMediaError();
+          seekIntoBuffer();
           return;
         }
         setLoading(false);
@@ -96,6 +129,8 @@ export function LiveVideo({ playbackUrl }: LiveVideoProps) {
 
     return () => {
       cancelled = true;
+      video.removeEventListener("loadeddata", showFrame);
+      video.removeEventListener("resize", showFrame);
       hlsRef.current?.destroy();
       hlsRef.current = null;
       video.removeAttribute("src");

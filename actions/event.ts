@@ -433,9 +433,7 @@ export async function endEventLive(eventId: string) {
     },
   });
 
-  revalidatePath(`/u/${self.username}/live`);
-  revalidatePath(`/u/${self.username}/live/${eventId}`);
-  revalidatePath(`/u/${event.creator.username}/repository`);
-  revalidatePath(`/u/${event.creator.username}/repository/${eventId}`);
+  revalidatePath(`/u/${self.username}/repository`);
+  revalidatePath(`/u/${self.username}/repository/${eventId}`);
   return { recordingUrl: recording.url, recordingError: recording.error };
 }

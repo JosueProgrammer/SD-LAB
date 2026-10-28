@@ -11,8 +11,8 @@ rtmpAddress: :1935
 hls: yes
 hlsAddress: :8888
 hlsAlwaysRemux: yes
-# fmp4 es más compatible con hls.js en Chrome que lowLatency
-hlsVariant: fmp4
+# mpegts mantiene audio y video juntos. fMP4 los separa y Chrome pinta negro.
+hlsVariant: mpegts
 hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 hlsSegmentMaxSize: 50M

@@ -52,6 +52,7 @@ export function LiveRoom({
   canManage = true,
 }: LiveRoomProps) {
   const [identity, setIdentity] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const roomKey = `event:${event.id}`;
 
   useEffect(() => {
@@ -110,19 +111,23 @@ export function LiveRoom({
             <Radio className="w-3.5 h-3.5 text-red-500 animate-pulse" />
             <span className="text-xs font-bold text-red-500 tracking-widest">EN VIVO</span>
           </div>
-          {canManage && <EndLiveButton eventId={event.id} username={username} />}
+          {canManage && (
+            <EndLiveButton eventId={event.id} username={username} onPendingChange={setUploading} />
+          )}
         </div>
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 overflow-hidden">
         <div className="lg:col-span-3 xl:col-span-4 flex flex-col overflow-hidden">
           <div className="relative flex-1 min-h-[50vh] bg-black">
-            <Video
-              hostName={hostUsername}
-              playbackUrl={playbackUrl}
-              isLive={isLive}
-              fill
-            />
+            {!uploading && (
+              <Video
+                hostName={hostUsername}
+                playbackUrl={playbackUrl}
+                isLive={isLive}
+                fill
+              />
+            )}
             <div className="absolute bottom-4 left-4 z-30">
               <ViewerCount roomKey={roomKey} hostIdentity={hostId} />
             </div>
@@ -148,7 +153,7 @@ export function LiveRoom({
               isChatEnabled={true}
               isChatDelayed={false}
               isChatFollowersOnly={false}
-              isLive={isLive}
+              isLive={isLive && !uploading}
             />
           </div>
         </div>

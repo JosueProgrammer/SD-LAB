@@ -1,12 +1,13 @@
+import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
-import { UTApi, UTFile } from "uploadthing/server";
-import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { recordingsDir } from "@/lib/mediamtx";
+import { uploadMp4FileToSupabase } from "@/lib/recording-upload";
 
 const recordingStartFailed = new Set<string>();
 const recordingStartError = new Map<string, string>();
+const uploadsInFlight = new Map<string, Promise<{ url: string | null; error: string | null }>>();
 
 function supabaseConfig() {
   const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
@@ -26,15 +27,8 @@ function supabaseConfig() {
   return { projectUrl, accessKey, secret, bucket, region, endpoint };
 }
 
-function hasUploadThing() {
-  return Boolean(process.env.UPLOADTHING_TOKEN);
-}
-
 function missingStorageMessage() {
-  if (!supabaseConfig() && !hasUploadThing()) {
-    return "Configura Supabase Storage (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY, SUPABASE_S3_REGION, SUPABASE_STORAGE_BUCKET) para guardar la grabación.";
-  }
-  return "Se necesita Supabase Storage o UploadThing para publicar la grabación.";
+  return "Configura Supabase Storage (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY y SUPABASE_STORAGE_BUCKET) para guardar la grabación.";
 }
 
 async function walkFiles(dir: string): Promise<string[]> {
@@ -52,7 +46,7 @@ async function walkFiles(dir: string): Promise<string[]> {
   }
 }
 
-async function findLatestRecording(streamPath: string): Promise<string | null> {
+async function findLargestRecording(streamPath: string): Promise<string | null> {
   const base = path.join(recordingsDir(), streamPath);
   const files = await walkFiles(base);
   if (files.length === 0) return null;
@@ -60,51 +54,117 @@ async function findLatestRecording(streamPath: string): Promise<string | null> {
   const withStats = await Promise.all(
     files.map(async (file) => {
       const stat = await fs.stat(file);
-      return { file, mtime: stat.mtimeMs, size: stat.size };
+      return { file, size: stat.size };
     })
   );
 
-  withStats.sort((a, b) => b.mtime - a.mtime);
-  const best = withStats.find((item) => item.size > 1024) ?? withStats[0];
+  withStats.sort((a, b) => b.size - a.size);
+  const best = withStats.find((item) => item.size > 1024);
   return best?.file ?? null;
 }
 
-async function uploadBytesToSupabase(objectPath: string, bytes: Uint8Array) {
-  const { uploadMp4ToSupabase } = await import("@/lib/recording-upload");
-  return uploadMp4ToSupabase(objectPath, bytes);
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function uploadToUploadThing(bytes: Uint8Array, fileName: string) {
-  if (!hasUploadThing()) return null;
-  const name = fileName.endsWith(".mp4") ? fileName : `${fileName}.mp4`;
-  const file = new UTFile([Buffer.from(bytes)], name, { type: "video/mp4" });
-  const utapi = new UTApi();
-  const result = await utapi.uploadFiles(file);
-  if (result.error || !result.data) {
-    console.error("UploadThing rechazó la grabación", result.error);
-    return null;
+/** Espera a que MediaMTX cierre el archivo: el tamaño deja de crecer. */
+async function waitForStableRecording(streamPath: string) {
+  let previousSize = -1;
+  let stableHits = 0;
+  let latest: string | null = null;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    latest = await findLargestRecording(streamPath);
+    if (!latest) {
+      await sleep(400);
+      continue;
+    }
+    const { size } = await fs.stat(latest);
+    if (size > 1024 && size === previousSize) {
+      stableHits += 1;
+      if (stableHits >= 2) return latest;
+    } else {
+      stableHits = 0;
+      previousSize = size;
+    }
+    await sleep(400);
   }
-  return result.data.ufsUrl || result.data.url || null;
+
+  return findLargestRecording(streamPath);
+}
+
+const SUPABASE_SAFE_BYTES = 45 * 1024 * 1024;
+
+function compressForStorage(input: string, output: string) {
+  const inDir = path.dirname(path.resolve(input));
+  const outDir = path.dirname(path.resolve(output));
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "-v",
+        `${inDir}:/in`,
+        "-v",
+        `${outDir}:/out`,
+        "jrottenberg/ffmpeg:6.1-alpine",
+        "-y",
+        "-i",
+        `/in/${path.basename(input)}`,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-b:v",
+        "700k",
+        "-maxrate",
+        "900k",
+        "-bufsize",
+        "1400k",
+        "-vf",
+        "scale=1280:-2",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "96k",
+        "-movflags",
+        "+faststart",
+        `/out/${path.basename(output)}`,
+      ],
+      { stdio: "ignore" }
+    );
+    child.on("error", () => {
+      reject(new Error("La grabación pesa más de lo que permite Supabase y no se pudo reducir."));
+    });
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error("La grabación pesa más de lo que permite Supabase y no se pudo reducir."));
+    });
+  });
 }
 
 async function publishLocalRecording(filePath: string, eventId: string) {
-  const bytes = new Uint8Array(await fs.readFile(filePath));
-  const fileName = `recordings/${eventId}-${Date.now()}.mp4`;
-
-  const supabase = supabaseConfig();
-  if (supabase) {
-    // Subida vía S3-compatible firmada no está cableada aquí; usar UploadThing si falla.
-    const viaPut = await uploadBytesToSupabase(fileName, bytes);
-    if (viaPut) return viaPut;
+  if (!supabaseConfig()) throw new Error(missingStorageMessage());
+  const info = await fs.stat(filePath);
+  let source = filePath;
+  let temp: string | null = null;
+  if (info.size > SUPABASE_SAFE_BYTES) {
+    temp = path.join(path.dirname(filePath), `${eventId}-upload.mp4`);
+    await compressForStorage(filePath, temp);
+    source = temp;
   }
-
-  return uploadToUploadThing(bytes, path.basename(fileName));
+  try {
+    return await uploadMp4FileToSupabase(`recordings/${eventId}.mp4`, source);
+  } finally {
+    if (temp) await fs.unlink(temp).catch(() => undefined);
+  }
 }
 
 export async function startEventRecording(eventId: string) {
   if (recordingStartFailed.has(eventId)) return;
 
-  if (!supabaseConfig() && !hasUploadThing()) {
+  if (!supabaseConfig()) {
     recordingStartError.set(eventId, missingStorageMessage());
     return;
   }
@@ -159,6 +219,17 @@ export async function allowRecordingRetry(eventId: string) {
 }
 
 export async function finalizeEventRecording(eventId: string) {
+  const current = uploadsInFlight.get(eventId);
+  if (current) return current;
+
+  const job = saveEventRecording(eventId).finally(() => {
+    uploadsInFlight.delete(eventId);
+  });
+  uploadsInFlight.set(eventId, job);
+  return job;
+}
+
+async function saveEventRecording(eventId: string) {
   const event = await db.event.findUnique({
     where: { id: eventId },
     include: { creator: { select: { username: true } } },
@@ -185,13 +256,7 @@ export async function finalizeEventRecording(eventId: string) {
   }
 
   try {
-    // Espera breve a que MediaMTX cierre el segmento
-    let filePath: string | null = null;
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      filePath = await findLatestRecording(streamPath);
-      if (filePath) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
+    const filePath = await waitForStableRecording(streamPath);
 
     if (!filePath) {
       return {
@@ -213,8 +278,6 @@ export async function finalizeEventRecording(eventId: string) {
       where: { id: event.id },
       data: { recordingUrl, recordingEnabled: true },
     });
-    revalidatePath(`/u/${event.creator.username}/repository`);
-    revalidatePath(`/u/${event.creator.username}/repository/${event.id}`);
     return { url: recordingUrl, error: null };
   } catch (error) {
     console.error(error);

@@ -1,4 +1,7 @@
 import { createHash, createHmac } from "crypto";
+import { createReadStream } from "fs";
+import { stat } from "fs/promises";
+import https from "https";
 
 function supabaseConfig() {
   const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
@@ -26,16 +29,31 @@ function sha256Hex(data: Buffer | string) {
   return createHash("sha256").update(data).digest("hex");
 }
 
-/** Sube un MP4 a Supabase Storage vía API S3-compatible firmada (SigV4). */
-export async function uploadMp4ToSupabase(objectPath: string, bytes: Uint8Array) {
-  const cfg = supabaseConfig();
-  if (!cfg) return null;
+async function hashFile(filePath: string) {
+  const hash = createHash("sha256");
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve());
+    stream.on("error", reject);
+  });
+  return hash.digest("hex");
+}
 
-  const host = new URL(cfg.endpoint).host;
-  const canonicalUri = `/${cfg.bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
+async function putMp4(objectPath: string, payloadHash: string, filePath: string, contentLength: number) {
+  const cfg = supabaseConfig();
+  if (!cfg) {
+    throw new Error(
+      "Configura Supabase Storage (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY y SUPABASE_STORAGE_BUCKET)."
+    );
+  }
+
+  const objectKey = objectPath.split("/").map(encodeURIComponent).join("/");
+  const target = new URL(`${cfg.endpoint}/${cfg.bucket}/${objectKey}`);
+  const host = target.host;
+  const canonicalUri = target.pathname;
   const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
   const dateStamp = amzDate.slice(0, 8);
-  const payloadHash = sha256Hex(Buffer.from(bytes));
   const contentType = "video/mp4";
 
   const canonicalHeaders =
@@ -44,22 +62,10 @@ export async function uploadMp4ToSupabase(objectPath: string, bytes: Uint8Array)
     `x-amz-content-sha256:${payloadHash}\n` +
     `x-amz-date:${amzDate}\n`;
   const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
-  const canonicalRequest = [
-    "PUT",
-    canonicalUri,
-    "",
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash,
-  ].join("\n");
+  const canonicalRequest = ["PUT", canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
 
   const credentialScope = `${dateStamp}/${cfg.region}/s3/aws4_request`;
-  const stringToSign = [
-    "AWS4-HMAC-SHA256",
-    amzDate,
-    credentialScope,
-    sha256Hex(canonicalRequest),
-  ].join("\n");
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
 
   const kDate = hmac(`AWS4${cfg.secret}`, dateStamp);
   const kRegion = hmac(kDate, cfg.region);
@@ -71,22 +77,63 @@ export async function uploadMp4ToSupabase(objectPath: string, bytes: Uint8Array)
     `AWS4-HMAC-SHA256 Credential=${cfg.accessKey}/${credentialScope}, ` +
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-  const res = await fetch(`${cfg.endpoint}${canonicalUri}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": contentType,
-      "x-amz-content-sha256": payloadHash,
-      "x-amz-date": amzDate,
-      Authorization: authorization,
-    },
-    body: Buffer.from(bytes),
+  const publicUrl = `${cfg.projectUrl}/storage/v1/object/public/${cfg.bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
+
+  await new Promise<void>((resolve, reject) => {
+    const req = https.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        path: `${target.pathname}${target.search}`,
+        method: "PUT",
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": contentLength ?? 0,
+          "x-amz-content-sha256": payloadHash,
+          "x-amz-date": amzDate,
+          Authorization: authorization,
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        res.on("end", () => {
+          const status = res.statusCode ?? 500;
+          if (status >= 300) {
+            const detail = Buffer.concat(chunks).toString("utf8");
+            console.error("[recording] Supabase S3 PUT failed", status, detail);
+            if (status === 413 || detail.includes("EntityTooLarge")) {
+              reject(
+                new Error(
+                  "La grabación pesa más de lo que permite Supabase. En el proyecto abre Storage, sube el límite de tamaño del archivo y vuelve a guardarla."
+                )
+              );
+              return;
+            }
+            reject(new Error("No se pudo guardar la grabación en Supabase Storage."));
+            return;
+          }
+          resolve();
+        });
+      }
+    );
+    req.on("error", reject);
+    if (!filePath) {
+      req.end();
+      return;
+    }
+    createReadStream(filePath).on("error", reject).pipe(req);
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.error("[recording] Supabase S3 PUT failed", res.status, text);
-    return null;
-  }
+  return publicUrl;
+}
 
-  return `${cfg.projectUrl}/storage/v1/object/public/${cfg.bucket}/${objectPath}`;
+/** Sube el archivo completo. Una sola clave por evento, sin copias. */
+export async function uploadMp4FileToSupabase(objectPath: string, filePath: string) {
+  const info = await stat(filePath);
+  if (info.size < 1024) {
+    throw new Error("La grabación está vacía. Espera a que OBS termine de cerrar el archivo.");
+  }
+  const payloadHash = await hashFile(filePath);
+  return putMp4(objectPath, payloadHash, filePath, info.size);
 }
