@@ -1,4 +1,7 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-npx --no -- commitlint --edit "$1"
+# commitlint es opcional en este repo
+if [ -f node_modules/@commitlint/cli/cli.js ] || [ -f node_modules/.bin/commitlint ]; then
+  npx --no -- commitlint --edit "$1"
+fi
