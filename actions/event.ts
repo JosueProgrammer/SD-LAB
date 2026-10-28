@@ -437,3 +437,46 @@ export async function endEventLive(eventId: string) {
   revalidatePath(`/u/${self.username}/repository/${eventId}`);
   return { recordingUrl: recording.url, recordingError: recording.error };
 }
+
+/** Estado de reproducción en vivo para host e invitados autorizados. */
+export async function getEventLivePlayback(eventId: string) {
+  const self = await getSelf();
+  if (!self) throw new Error("No autenticado");
+
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      status: true,
+      isLive: true,
+      obsConnected: true,
+      streamPath: true,
+      playbackUrl: true,
+      creatorId: true,
+      participants: { select: { userId: true, status: true } },
+    },
+  });
+  if (!event) throw new Error("Evento no encontrado");
+
+  const isHost = event.creatorId === self.id || self.role === "ADMIN";
+  const isInvitee = event.participants.some(
+    (p) =>
+      p.userId === self.id && (p.status === "ACCEPTED" || p.status === "PENDING")
+  );
+  const isSupervisor = self.role === "JEFE_DEPARTAMENTO" || self.role === "ADMIN";
+  if (!isHost && !isInvitee && !isSupervisor) {
+    throw new Error("No autorizado");
+  }
+
+  const playbackUrl = event.streamPath
+    ? `/api/hls/${event.streamPath}/index.m3u8`
+    : event.playbackUrl;
+
+  return {
+    status: event.status,
+    isLive: event.isLive || event.obsConnected,
+    obsConnected: event.obsConnected,
+    streamPath: event.streamPath,
+    playbackUrl,
+  };
+}

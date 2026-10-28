@@ -2,7 +2,7 @@ import { getDashboardStats } from "@/actions/dashboard";
 import { getSelf, requireRole } from "@/lib/auth-service";
 import { getAdminDashboardStats } from "@/lib/event-service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Activity, GraduationCap, UserRound, CalendarDays } from "lucide-react";
+import { Users, Activity } from "lucide-react";
 import { AdminLiveMonitor } from "./_components/admin-live-monitor";
 
 export default async function DashboardPage() {
@@ -15,11 +15,11 @@ export default async function DashboardPage() {
     await requireRole("ADMIN");
     const stats = await getAdminDashboardStats();
     const items = [
-      { label: "Usuarios registrados", value: stats.totalUsers, icon: Users },
-      { label: "Jefes registrados", value: stats.jefes, icon: UserRound },
-      { label: "Docentes registrados", value: stats.docentes, icon: GraduationCap },
-      { label: "Invitados registrados", value: stats.invitados, icon: Users },
-      { label: "Eventos creados", value: stats.events, icon: CalendarDays },
+      { key: "users" as const, label: "Usuarios registrados", value: stats.totalUsers },
+      { key: "jefes" as const, label: "Jefes registrados", value: stats.jefes },
+      { key: "docentes" as const, label: "Docentes registrados", value: stats.docentes },
+      { key: "invitados" as const, label: "Invitados registrados", value: stats.invitados },
+      { key: "eventos" as const, label: "Eventos creados", value: stats.events },
     ];
     return <AdminLiveMonitor initialStats={items} />;
   }

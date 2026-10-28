@@ -11,6 +11,7 @@ import { ParticipantList } from "./participant-list";
 import { ViewerCount } from "./viewer-count";
 import { createViewerToken } from "@/actions/token";
 import { onBlock } from "@/actions/block";
+import { getEventLivePlayback } from "@/actions/event";
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   CONFERENCIA: "Conferencia",
@@ -53,6 +54,12 @@ export function LiveRoom({
 }: LiveRoomProps) {
   const [identity, setIdentity] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isLive, setIsLive] = useState(event.isLive || event.obsConnected);
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(
+    event.streamPath
+      ? `/api/hls/${event.streamPath}/index.m3u8`
+      : event.playbackUrl
+  );
   const roomKey = `event:${event.id}`;
 
   useEffect(() => {
@@ -60,6 +67,29 @@ export function LiveRoom({
       .then((token) => setIdentity(token.identity))
       .catch(console.error);
   }, [hostId]);
+
+  // El invitado necesita refrescar streamPath/obsConnected cuando el docente arranca OBS.
+  useEffect(() => {
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const next = await getEventLivePlayback(event.id);
+        if (cancelled) return;
+        setIsLive(next.isLive);
+        setPlaybackUrl(next.playbackUrl);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    void tick();
+    const timer = window.setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [event.id]);
 
   const handleBlock = async (participantIdentity: string) => {
     await onBlock(participantIdentity);
@@ -72,11 +102,6 @@ export function LiveRoom({
       </div>
     );
   }
-
-  const isLive = event.isLive || event.obsConnected;
-  const playbackUrl = event.streamPath
-    ? `/api/hls/${event.streamPath}/index.m3u8`
-    : event.playbackUrl;
 
   return (
     <div className="flex flex-col h-full gap-0">
@@ -124,8 +149,15 @@ export function LiveRoom({
               <Video
                 hostName={hostUsername}
                 playbackUrl={playbackUrl}
-                isLive={isLive}
+                isLive={isLive && Boolean(playbackUrl)}
                 fill
+                waitingLabel={
+                  isLive && !playbackUrl
+                    ? "Esperando la señal de OBS del docente…"
+                    : !isLive
+                      ? "El docente aún no está transmitiendo. Esta pantalla se actualizará sola."
+                      : undefined
+                }
               />
             )}
             <div className="absolute bottom-4 left-4 z-30">

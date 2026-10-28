@@ -15,9 +15,12 @@ import {
 import { format } from "date-fns";
 import {
   Activity,
+  CalendarDays,
   Cpu,
+  GraduationCap,
   HardDrive,
   Radio,
+  UserRound,
   Users,
   Wifi,
   Gauge,
@@ -26,10 +29,20 @@ import { getAdminLiveMetrics, type AdminLiveMetrics } from "@/actions/admin-metr
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+type StatKey = "users" | "jefes" | "docentes" | "invitados" | "eventos";
+
 type StatItem = {
+  key: StatKey;
   label: string;
   value: number;
-  icon: ComponentType<{ className?: string }>;
+};
+
+const statIcons: Record<StatKey, ComponentType<{ className?: string }>> = {
+  users: Users,
+  jefes: UserRound,
+  docentes: GraduationCap,
+  invitados: Users,
+  eventos: CalendarDays,
 };
 
 function levelColor(level: "ok" | "warn" | "crit" | null | undefined) {
@@ -123,17 +136,20 @@ export function AdminLiveMonitor({ initialStats }: AdminLiveMonitorProps) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {initialStats.map((item) => (
-          <Card key={item.label}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{item.label}</CardTitle>
-              <item.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{item.value}</div>
-            </CardContent>
-          </Card>
-        ))}
+        {initialStats.map((item) => {
+          const Icon = statIcons[item.key] ?? Users;
+          return (
+            <Card key={item.key}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{item.label}</CardTitle>
+                <Icon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{item.value}</div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {error && (

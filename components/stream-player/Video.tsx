@@ -9,14 +9,21 @@ interface VideoProps {
   playbackUrl: string | null | undefined;
   isLive?: boolean;
   fill?: boolean;
+  waitingLabel?: string;
 }
 
-export function Video({ hostName, playbackUrl, isLive = false, fill = false }: VideoProps) {
+export function Video({
+  hostName,
+  playbackUrl,
+  isLive = false,
+  fill = false,
+  waitingLabel,
+}: VideoProps) {
   const content =
     isLive && playbackUrl ? (
       <LiveVideo playbackUrl={playbackUrl} />
     ) : (
-      <OffLineVideo username={hostName} />
+      <OffLineVideo username={hostName} waitingLabel={waitingLabel} />
     );
 
   return (
