@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+# MediaMTX para Azure Container Apps: binario oficial + curl (webhooks) + config azure.
+
+FROM bluenviron/mediamtx:1.11.3 AS mtx
+
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates curl \
+  && mkdir -p /recordings
+
+COPY --from=mtx /mediamtx /usr/local/bin/mediamtx
+COPY mediamtx.azure.yml /mediamtx.yml
+
+EXPOSE 1935 8888 9997
+
+VOLUME ["/recordings"]
+
+ENTRYPOINT ["/usr/local/bin/mediamtx"]
+CMD ["/mediamtx.yml"]

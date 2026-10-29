@@ -1,0 +1,59 @@
+# MediaMTX — Azure Container Apps (producción)
+# Webhooks al Container App sdlab-web por DNS interno del Environment.
+logLevel: info
+logDestinations: [stdout]
+
+api: yes
+apiAddress: :9997
+
+rtmp: yes
+rtmpAddress: :1935
+
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+# mpegts mantiene audio y video juntos (mejor compatibilidad con hls.js / Chrome).
+hlsVariant: mpegts
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsSegmentMaxSize: 50M
+hlsAllowOrigin: "*"
+
+webrtc: no
+srt: no
+rtsp: no
+
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass: ""
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+
+pathDefaults:
+  record: yes
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 48h
+
+  runOnReady: >
+    curl -sS -X POST "http://sdlab-web:3000/api/webhooks/mediamtx"
+    -H "Content-Type: application/json"
+    -d "{\"action\":\"ready\",\"path\":\"$MTX_PATH\"}"
+    || true
+  runOnReadyRestart: no
+
+  runOnNotReady: >
+    curl -sS -X POST "http://sdlab-web:3000/api/webhooks/mediamtx"
+    -H "Content-Type: application/json"
+    -d "{\"action\":\"notready\",\"path\":\"$MTX_PATH\"}"
+    || true
+
+paths:
+  all_others:

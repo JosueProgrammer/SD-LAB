@@ -1,0 +1,105 @@
+name: Deploy Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  WEB_APP: sdlab-web
+  MTX_APP: sdlab-mediamtx
+  WEB_IMAGE: sdlab-web
+  MTX_IMAGE: sdlab-mediamtx
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      mediamtx: ${{ steps.filter.outputs.mediamtx }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            mediamtx:
+              - 'Dockerfile.mediamtx'
+              - 'mediamtx.azure.yml'
+
+  build-and-deploy:
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.WEB_IMAGE }}:${{ github.sha }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.WEB_IMAGE }}:latest
+          build-args: |
+            NEXT_PUBLIC_HLS_BASE_URL=${{ vars.NEXT_PUBLIC_HLS_BASE_URL }}
+            NEXT_PUBLIC_FIREBASE_API_KEY=${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+            NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+            NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+            NEXT_PUBLIC_FIREBASE_APP_ID=${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+
+      - name: Update Container App (web)
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            RG="${{ secrets.AZURE_RESOURCE_GROUP }}"
+            IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/${{ env.WEB_IMAGE }}:${{ github.sha }}"
+            az containerapp update \
+              --name "${{ env.WEB_APP }}" \
+              --resource-group "$RG" \
+              --image "$IMAGE"
+
+      - name: Build and push MediaMTX image
+        if: needs.changes.outputs.mediamtx == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.mediamtx
+          push: true
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.MTX_IMAGE }}:${{ github.sha }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.MTX_IMAGE }}:latest
+
+      - name: Update Container App (MediaMTX)
+        if: needs.changes.outputs.mediamtx == 'true' || github.event_name == 'workflow_dispatch'
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            RG="${{ secrets.AZURE_RESOURCE_GROUP }}"
+            IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/${{ env.MTX_IMAGE }}:${{ github.sha }}"
+            az containerapp update \
+              --name "${{ env.MTX_APP }}" \
+              --resource-group "$RG" \
+              --image "$IMAGE"
