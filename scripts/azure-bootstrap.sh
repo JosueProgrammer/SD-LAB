@@ -32,13 +32,36 @@ az monitor log-analytics workspace create \
 LOG_ID="$(az monitor log-analytics workspace show -g "$RG" -n "$LOG_WS" --query customerId -o tsv)"
 LOG_KEY="$(az monitor log-analytics workspace get-shared-keys -g "$RG" -n "$LOG_WS" --query primarySharedKey -o tsv)"
 
-echo "==> Container Apps Environment $ENV_NAME"
+VNET_NAME="${VNET_NAME:-sdlab-vnet}"
+INFRA_SUBNET="${INFRA_SUBNET:-infrastructure}"
+
+echo "==> VNet $VNET_NAME (requerida para ingress TCP externo OBS)"
+az network vnet create \
+  --resource-group "$RG" \
+  --name "$VNET_NAME" \
+  --location "$LOCATION" \
+  --address-prefix 10.0.0.0/16 \
+  --output none
+az network vnet subnet create \
+  --resource-group "$RG" \
+  --vnet-name "$VNET_NAME" \
+  --name "$INFRA_SUBNET" \
+  --address-prefixes 10.0.0.0/23 \
+  --delegations Microsoft.App/environments \
+  --output none
+SUBNET_ID="$(az network vnet subnet show -g "$RG" --vnet-name "$VNET_NAME" -n "$INFRA_SUBNET" --query id -o tsv)"
+
+echo "==> Container Apps Environment $ENV_NAME (WorkloadProfiles + VNet; no Express)"
+# Express no soporta TCP, Azure Files ni DNS interno. TCP externo exige VNet custom.
 az containerapp env create \
   --name "$ENV_NAME" \
   --resource-group "$RG" \
   --location "$LOCATION" \
   --logs-workspace-id "$LOG_ID" \
   --logs-workspace-key "$LOG_KEY" \
+  --enable-workload-profiles true \
+  --environment-mode WorkloadProfiles \
+  --infrastructure-subnet-resource-id "$SUBNET_ID" \
   --output none
 ENV_ID="$(az containerapp env show -n "$ENV_NAME" -g "$RG" --query id -o tsv)"
 

@@ -40,7 +40,7 @@ chmod +x scripts/azure-bootstrap.sh
 
 Variables opcionales: `LOCATION`, `RG`, `ACR_NAME`, `ENV_NAME`, `WEB_APP`, `MTX_APP`.
 
-El script crea RG, ACR, Log Analytics, Environment, Storage/Files, registra el volumen `recordings` en el Environment, y las dos Container Apps.
+El script crea RG, ACR, Log Analytics, VNet (`sdlab-vnet`), Environment en modo **WorkloadProfiles** con subnet (no Express; TCP externo OBS exige VNet), Storage/Files, registra el volumen `recordings`, y las dos Container Apps.
 
 ### Puertos adicionales de MediaMTX (HLS + API internos)
 

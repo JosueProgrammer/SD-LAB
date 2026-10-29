@@ -12,8 +12,12 @@
 **/.env
 **/.env.*
 !**/.env.example
-Dockerfile*
 docker-compose*.yml
 scripts
 terminals
 assets
+recordings
+recordings/**
+**/*.mp4
+**/*.fmp4
+**/*.m3u8
