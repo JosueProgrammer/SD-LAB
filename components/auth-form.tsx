@@ -55,8 +55,19 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idToken }),
     });
-    const data = await response.json();
+    const raw = await response.text();
+    let data: { error?: string; role?: string; username?: string } = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      throw new Error(
+        response.ok
+          ? "Respuesta de sesión inválida"
+          : `No se pudo crear la sesión (HTTP ${response.status})`
+      );
+    }
     if (!response.ok) throw new Error(data.error || "No se pudo crear la sesión");
+    if (!data.username) throw new Error("Sesión creada sin usuario");
     const destination =
       data.role === "ADMIN" ? `/u/${data.username}/dashboard` : `/u/${data.username}`;
     router.push(destination);

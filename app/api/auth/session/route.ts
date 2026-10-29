@@ -20,63 +20,69 @@ async function uniqueUsername(preferred: string) {
 }
 
 export async function POST(request: Request) {
-  const { idToken } = await request.json();
-  if (!idToken) return NextResponse.json({ error: "Missing ID token" }, { status: 400 });
+  try {
+    const { idToken } = await request.json();
+    if (!idToken) return NextResponse.json({ error: "Missing ID token" }, { status: 400 });
 
-  const auth = firebaseAdminAuth();
-  const decoded = await auth.verifyIdToken(idToken);
-  const firebaseUser = await auth.getUser(decoded.uid);
-  const existing = await db.user.findUnique({ where: { externalUserId: decoded.uid } });
+    const auth = firebaseAdminAuth();
+    const decoded = await auth.verifyIdToken(idToken);
+    const firebaseUser = await auth.getUser(decoded.uid);
+    const existing = await db.user.findUnique({ where: { externalUserId: decoded.uid } });
 
-  if (existing && !existing.isActive) {
-    return NextResponse.json({ error: "Tu cuenta está desactivada." }, { status: 403 });
-  }
+    if (existing && !existing.isActive) {
+      return NextResponse.json({ error: "Tu cuenta está desactivada." }, { status: 403 });
+    }
 
-  let username = existing?.username;
-  let role = existing?.role ?? ("INVITADO" as const);
+    let username = existing?.username;
+    let role = existing?.role ?? ("INVITADO" as const);
 
-  if (!existing) {
-    const isFirstUser = (await db.user.count()) === 0;
-    role = isFirstUser ? "ADMIN" : "INVITADO";
-    username = await uniqueUsername(
-      firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "usuario"
-    );
+    if (!existing) {
+      const isFirstUser = (await db.user.count()) === 0;
+      role = isFirstUser ? "ADMIN" : "INVITADO";
+      username = await uniqueUsername(
+        firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "usuario"
+      );
 
-    await db.user.create({
-      data: {
-        externalUserId: decoded.uid,
-        username,
-        email: firebaseUser.email || null,
-        imageUrl: firebaseUser.photoURL || "",
-        role,
-        firstName: firebaseUser.displayName?.split(" ")[0] || null,
-        lastName: firebaseUser.displayName?.split(" ").slice(1).join(" ") || null,
-        isActive: true,
-        lastLoginAt: new Date(),
-        stream: { create: { name: `Streams de ${username}` } },
-      },
+      await db.user.create({
+        data: {
+          externalUserId: decoded.uid,
+          username,
+          email: firebaseUser.email || null,
+          imageUrl: firebaseUser.photoURL || "",
+          role,
+          firstName: firebaseUser.displayName?.split(" ")[0] || null,
+          lastName: firebaseUser.displayName?.split(" ").slice(1).join(" ") || null,
+          isActive: true,
+          lastLoginAt: new Date(),
+          stream: { create: { name: `Streams de ${username}` } },
+        },
+      });
+    } else {
+      await db.user.update({
+        where: { id: existing.id },
+        data: {
+          imageUrl: firebaseUser.photoURL || existing.imageUrl || "",
+          email: firebaseUser.email || existing.email || null,
+          lastLoginAt: new Date(),
+        },
+      });
+    }
+
+    const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn: SESSION_DURATION });
+    const response = NextResponse.json({ username, role });
+    response.cookies.set(SESSION_COOKIE, sessionCookie, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: SESSION_DURATION / 1000,
+      path: "/",
     });
-  } else {
-    await db.user.update({
-      where: { id: existing.id },
-      data: {
-        imageUrl: firebaseUser.photoURL || existing.imageUrl || "",
-        email: firebaseUser.email || existing.email || null,
-        lastLoginAt: new Date(),
-      },
-    });
+    return response;
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "No se pudo crear la sesión";
+    console.error("[auth/session]", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn: SESSION_DURATION });
-  const response = NextResponse.json({ username, role });
-  response.cookies.set(SESSION_COOKIE, sessionCookie, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: SESSION_DURATION / 1000,
-    path: "/",
-  });
-  return response;
 }
 
 export async function DELETE() {
